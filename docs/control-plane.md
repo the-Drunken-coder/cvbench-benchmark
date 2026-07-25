@@ -2,7 +2,7 @@
 
 CVBench's public control plane is one Cloudflare Worker with Static Assets and D1. It validates and queues immutable submitted system images; it never runs submitted code. A scheduled or manually dispatched GitHub-hosted Actions runner leases one job at a time and invokes the existing Docker-isolated CVBench engine.
 
-Every public v1 submission runs the fixed `public-whole-system-tracking` Version 3 suite declared by `benchmarks/public-whole-system-v3.yaml`: 13 synthetic scenarios, 3 dense full-frame MEVA scenarios, and exactly 10 dense MOTChallenge pedestrian scenarios. The request schema remains compatible and has no benchmark selector. Queued/public records and runner leases state the exact assignment, and the Worker rejects a successful callback whose report identifies a different benchmark or version.
+Every public v1 submission runs the fixed `public-whole-system-tracking` Version 2 suite declared by `benchmarks/public-whole-system-v2.yaml`: 13 synthetic scenarios and 3 dense, full-frame real-video scenarios. The request schema remains compatible and has no benchmark selector. Queued/public records and runner leases state the exact assignment, and the Worker rejects a successful callback whose report identifies a different benchmark or version.
 
 The same assignment is fixed to `cvbench.timing-compute/v1`, `cvbench.delivery-lossless/v1`, replay profile `native` at exactly 1.0x, and `cvbench.pareto/v1`. `/api/v1` accepts no replay-rate override, so another delivery pace cannot share the native leaderboard. Successful callbacks with a different timing, delivery, replay, or Pareto policy are rejected. Public and operator result summaries expose native duration, replay identity, CPU-seconds/native-source-second, real-time factor, peak RAM, and class while retaining the raw accuracy metrics.
 
@@ -25,7 +25,7 @@ The Worker source, site, migrations, and JavaScript tests live in `control-plane
 - Public reads omit contact, notes, authentication data, lease data, raw submitted-system output, stderr, and raw evidence artifacts. They return score summaries and finding statements only.
 - Operator reads use `OPERATOR_READ_API_KEYS`; adjudication writes use the secret JSON mapping `OPERATOR_ADJUDICATOR_CREDENTIALS={"actor/id":"token"}`. Each credential maps to exactly one stable actor identity; invalid, generic, duplicate, or cross-scope-overlapping credentials fail closed. Submission, runner, and read-only tokens cannot write notes. All bearer verification uses the same SHA-256 digest plus constant-time comparison path; only credential digests and the mapped actor ID are stored, never bearer values.
 - Operator flags are deterministic review aids. They never automatically disqualify a submitted system; adjudication is an explicit note/verdict trail.
-- A trusted runner bearer token protects leases and callbacks. Each lease also gets an independent random token, stored only as a digest, and state updates require `running -> succeeded|failed`. The 120-minute workflow is split into an explicit 60-minute pre-lease budget and 60-minute active-run budget. Every setup/preparation step is capped and their limits total less than the pre-lease budget, so official-only, fail-closed corpus preparation cannot consume active-run time. The 7200-second lease begins only afterward and exceeds the active-run budget by 3600 seconds; inside the lease, exact-corpus verification precedes a 600-second image-pull cap, a 1900-second benchmark subprocess cap around the manifest's 1800-second run budget, cleanup, and the bounded callback.
+- A trusted runner bearer token protects leases and callbacks. Each lease also gets an independent random token, stored only as a digest, and state updates require `running -> succeeded|failed`. The 3000-second lease exceeds the 40-minute workflow timeout with callback margin.
 - Each lease advertises the Worker's one-MiB result-body budget. The trusted runner preserves the complete scored report and deterministically retains head-and-tail stderr diagnostics that fit, recording original, retained, and omitted counts in the public result.
 - Expired leases return to `queued` and can be attempted again. Old callback tokens stop working.
 - The GitHub-hosted runner is ephemeral, has read-only repository permission, runs one job, and has no broad GitHub PAT in Cloudflare.
@@ -66,7 +66,7 @@ curl -sS http://localhost:8787/api/v1/contract
 curl -sS http://localhost:8787/api/v1/openapi.json
 ```
 
-`npm run build` deterministically creates the allowlisted Static Assets tree in `control-plane/dist`, including the complete public scenario catalog. `npm test` exercises the catalog build plus a complete in-memory HTTP lifecycle: authenticated creation with the fixed 26-scenario assignment, idempotent replay, public read, lease, benchmark-bound scored result callback, terminal-state rejection, failure callback, rate limit, payload limit, and lease expiry. It uses a safe baseline system-image reference and a representative scored CVBench report; it does not execute Docker.
+`npm run build` deterministically creates the allowlisted Static Assets tree in `control-plane/dist`, including the complete public scenario catalog. `npm test` exercises the catalog build plus a complete in-memory HTTP lifecycle: authenticated creation with the fixed 16-scenario assignment, idempotent replay, public read, lease, benchmark-bound scored result callback, terminal-state rejection, failure callback, rate limit, payload limit, and lease expiry. It uses a safe baseline system-image reference and a representative scored CVBench report; it does not execute Docker.
 
 `npm ci` also invokes this build through the package's `postinstall` hook, and the build-time YAML parser is a production dependency so `npm ci --omit=dev` follows the same contract. An explicit `npm run build` remains useful only for local regeneration after source edits.
 
@@ -88,18 +88,7 @@ CVBENCH_REPORT_PATH=/absolute/path/to/report.json \
 npm run test:d1
 ```
 
-The Linux CI `docker-scored-e2e` runs the fresh-checkout trusted-runner
-fail-closed lifecycle, synthetic Docker scoring, timing/accounting probes, and
-an isolated MEVA score from committed inputs. The same required job verifies
-the committed native-Linux ten-sequence MOT and complete 26-scenario reports
-against exact schemas, Docker isolation/accounting fields, provenance/license
-boundaries, deterministic scenario/catalog/frame/ground-truth hashes, and both
-corpus artifact manifests. This keeps ordinary PR CI hermetic without silently
-dropping the full-suite evidence contract. Operators with the three pinned
-official archives can reproduce the full native-Linux scoring packet with
-`scripts/run_trusted_mot_evidence.sh`; an unreachable upstream is never accepted
-as ingest success. Together with the Worker lifecycle tests, this covers public
-queue assignment through isolated execution and a benchmark-bound callback.
+The Linux CI `docker-scored-e2e` builds the synthetic and real-video baseline images, prepares and hash-verifies the dense corpus, runs the complete public 16-scenario manifest through the Docker-isolated engine, asserts HOTA/IDF1 and the exact benchmark identity, and checks the tested containers are gone. Together with the Worker lifecycle tests, this covers public queue assignment through isolated execution and a benchmark-bound callback.
 
 ## Production with Cloudflare Workers Builds
 

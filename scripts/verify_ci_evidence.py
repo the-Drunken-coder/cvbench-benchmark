@@ -33,8 +33,8 @@ def _assert_safe(path: Path) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) < 3:
-        raise SystemExit("usage: verify_ci_evidence.py RUNS ARTIFACT_MANIFEST [ARTIFACT_MANIFEST ...]")
+    if len(sys.argv) != 3:
+        raise SystemExit("usage: verify_ci_evidence.py RUNS ARTIFACT_MANIFEST")
     runs = Path(sys.argv[1])
     reports = sorted(runs.glob("*/report.json"))
     resources = sorted(runs.glob("*/resources.csv"))
@@ -42,16 +42,15 @@ def main() -> None:
     assert len(resources) == 1, resources
     for path in [*reports, *resources]:
         _assert_safe(path)
-    manifests = [Path(value) for value in sys.argv[2:]]
-    for manifest in manifests:
-        lines = [line for line in manifest.read_text().splitlines() if line.strip()]
-        assert lines, manifest
-        for line in lines:
-            assert HASH_LINE.fullmatch(line), line
-            relative_path = line.split("  ", 1)[1]
-            assert not Path(relative_path).is_absolute()
-            assert ".." not in Path(relative_path).parts
-    print(f"verified safe evidence: {reports[0]}, {resources[0]}, {', '.join(map(str, manifests))}")
+    manifest = Path(sys.argv[2])
+    lines = [line for line in manifest.read_text().splitlines() if line.strip()]
+    assert lines, manifest
+    for line in lines:
+        assert HASH_LINE.fullmatch(line), line
+        relative_path = line.split("  ", 1)[1]
+        assert not Path(relative_path).is_absolute()
+        assert ".." not in Path(relative_path).parts
+    print(f"verified safe evidence: {reports[0]}, {resources[0]}, {manifest}")
 
 
 if __name__ == "__main__":

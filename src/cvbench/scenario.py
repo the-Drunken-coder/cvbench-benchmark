@@ -90,7 +90,6 @@ def load_scenario(path: str | Path) -> Scenario:
         root=root,
         frames=frames,
         ground_truth=ground_truth,
-        ground_truth_path=gt_path.resolve(),
         faults=faults,
         scoreable_roi=scoreable_roi,
     )
