@@ -43,6 +43,8 @@ def load_scenario(path: str | Path) -> Scenario:
         raise ConfigurationError(f"cannot load scenario {path}: {exc}") from exc
     if not isinstance(data, dict) or data.get("schema_version") != "cvbench.scenario/v1":
         raise ConfigurationError(f"{path} is not a cvbench.scenario/v1 manifest")
+    if data.get("data_role") == "model_training_only":
+        raise ConfigurationError(f"{path} is model training data and cannot be used as evaluation truth")
     root = path.parent
     raw_frames = _object_list(data, "frames")
     faults = _object_list(data, "faults")

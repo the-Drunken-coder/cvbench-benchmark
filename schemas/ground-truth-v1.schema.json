@@ -10,8 +10,13 @@
     "source_timestamp_ns": {"type": "integer", "minimum": 0},
     "on_screen": {"type": "boolean"},
     "eligible_for_detection": {"type": "boolean"},
-    "visibility_fraction": {"type": "number", "minimum": 0, "maximum": 1},
-    "occlusion": {"enum": ["none", "partial", "full"]},
+    "visibility_fraction": {
+      "oneOf": [
+        {"type": "number", "minimum": 0, "maximum": 1},
+        {"type": "null"}
+      ]
+    },
+    "occlusion": {"enum": ["none", "partial", "full", "unknown"]},
     "class_id": {"type": "string"},
     "ignore": {"type": "boolean", "default": false},
     "ignore_region": {"type": "boolean", "default": false},
@@ -40,6 +45,13 @@
     {
       "if": {"required": ["ignore_region_id"]},
       "then": {"required": ["ignore_region"], "properties": {"ignore_region": {"const": true}}}
+    },
+    {
+      "if": {
+        "required": ["visibility_fraction"],
+        "properties": {"visibility_fraction": {"type": "null"}}
+      },
+      "then": {"properties": {"occlusion": {"const": "unknown"}}}
     }
   ],
   "additionalProperties": true

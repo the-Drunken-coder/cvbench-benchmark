@@ -45,6 +45,12 @@ See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Metrics
 
 The dense real-video-v2 corpus is documented in [Real-video sources and annotation audit](docs/real-video-sources.md). It contains three native-30-FPS, full-frame clips derived from the CC BY 4.0 MEVA dataset and its upstream per-frame tracking labels. Preparation verifies pinned source and annotation hashes; no unlabeled ordinary video or unreviewed interpolation is benchmark truth.
 
+User-supplied official MEVA KF1 training-level annotations can instead be
+prepared as an ignored, local-only positive-label training corpus. See
+[Local MEVA KF1 training corpus](docs/meva-training-corpus.md). These outputs
+are explicitly non-exhaustive, are never negative/background truth, and are
+rejected by the CVBench evaluator.
+
 ## Public scenario catalog and control plane
 
 Every scenario referenced by the current benchmark manifests is published at `/scenarios/`: 13 synthetic scenarios and 3 real-video scenarios, with exact benchmark JPEGs, full public annotations, scoring boundaries, provenance, licenses, hashes, and allowlisted first-party baseline summaries. The stable discovery endpoint is `/.well-known/cvbench-scenarios.json`; see [the catalog architecture and build contract](docs/scenario-catalog.md).
