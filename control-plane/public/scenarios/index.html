@@ -26,11 +26,12 @@
       <section class="catalog-hero" aria-labelledby="catalog-title">
         <p class="eyebrow">Catalog v1 · Exact benchmark bytes</p>
         <h1 id="catalog-title">Every current scenario, open.</h1>
-        <p>All current CVBench scenarios, exact JPEG sequences, full annotations, and scoring boundaries are public. They can be tuned to or memorized. Runtime isolation protects execution; it does not make public data secret. Future hidden challenges are out of scope.</p>
+        <p>All current CVBench scenarios, exact frame identities and hashes, full annotations, scoring boundaries, and deterministic viewer media are public. They can be tuned to or memorized. Runtime isolation protects execution; it does not make public data secret. Future hidden challenges are out of scope.</p>
         <div class="catalog-stats" aria-label="Catalog summary">
           <span><strong id="scenario-count">—</strong> scenarios</span>
           <span><strong>13</strong> synthetic</span>
           <span><strong>3</strong> real video</span>
+          <span><strong>10</strong> dense pedestrian</span>
         </div>
       </section>
 
@@ -47,6 +48,7 @@
                 <option value="all">All packs</option>
                 <option value="synthetic-v1">Synthetic v1</option>
                 <option value="real-video-v2">Real video v2</option>
+                <option value="motchallenge-v1">MOTChallenge v1</option>
               </select>
             </label>
           </div>
@@ -67,12 +69,13 @@
 
         <div class="viewer-grid">
           <div class="frame-viewer" id="frame-viewer" tabindex="0" aria-label="Exact frame-sequence viewer. Use Space to play or pause, Left and Right arrows to step, and Home or End to jump.">
+            <video id="scenario-video" controls preload="metadata" hidden aria-label="Deterministic public viewer derivative"></video>
             <div class="frame-stage" id="frame-stage">
               <canvas id="scenario-frame" width="160" height="120" role="img" aria-label="Exact benchmark frame" data-frame-ready="false">Exact benchmark frame.</canvas>
               <svg id="scenario-overlay" aria-hidden="true"></svg>
               <p id="media-state" class="media-state" role="alert" hidden></p>
             </div>
-            <div class="viewer-controls">
+            <div class="viewer-controls" id="viewer-controls">
               <button id="previous-frame" type="button" aria-label="Previous frame">←</button>
               <button id="play-pause" type="button" aria-label="Play sequence">Play</button>
               <button id="next-frame" type="button" aria-label="Next frame">→</button>
@@ -87,7 +90,7 @@
                 </select>
               </label>
             </div>
-            <fieldset class="overlay-controls">
+            <fieldset class="overlay-controls" id="overlay-controls">
               <legend>Overlays</legend>
               <label id="objects-overlay-label"><input type="checkbox" data-overlay="targets" checked> <span>Targets</span></label>
               <label id="ignores-overlay-label"><input type="checkbox" data-overlay="ignores" checked> Ignores</label>
@@ -99,7 +102,7 @@
             <p id="viewer-announcement" class="sr-only" aria-live="polite"></p>
           </div>
 
-          <aside class="frame-inspector" aria-labelledby="inspector-title">
+          <aside class="frame-inspector" id="frame-inspector" aria-labelledby="inspector-title">
             <p class="kicker">Selected-frame inspection</p>
             <h3 id="inspector-title">Frame facts</h3>
             <dl id="frame-facts"></dl>

@@ -1,0 +1,15 @@
+{
+  "schema_version": "cvbench.corpus-manifest-fingerprints/v1",
+  "corpora": {
+    "motchallenge-v1": {
+      "artifact_manifest_entries": 13420,
+      "artifact_manifest_path": "evidence/motchallenge-v1/corpora/motchallenge-v1-artifacts.sha256",
+      "artifact_manifest_sha256": "fc313a096f78ba090462380209d0bebc3c022a41a6148734015fca9c96959cd6"
+    },
+    "real-video-v2": {
+      "artifact_manifest_entries": 484,
+      "artifact_manifest_path": "evidence/motchallenge-v1/corpora/real-video-v2-artifacts.sha256",
+      "artifact_manifest_sha256": "259524cf2e9e19bed6fa6355ed43267c84306184d429516b80853f88581f2dff"
+    }
+  }
+}

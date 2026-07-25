@@ -87,7 +87,9 @@ def _comparison_fingerprint(
             {
                 "id": scenario.id,
                 "manifest_sha256": _sha256(manifest),
-                "ground_truth_sha256": _sha256(scenario.root / "ground_truth.jsonl"),
+                "ground_truth_sha256": _sha256(
+                    scenario.ground_truth_path or scenario.root / "ground_truth.jsonl"
+                ),
                 "frame_sha256": [
                     {
                         "frame_index": frame.frame_index,
@@ -472,6 +474,7 @@ def _load_unique_scenarios(
                 root=scenario.root,
                 frames=[replace(frame, sequence_id=unique_sequence) for frame in scenario.frames],
                 ground_truth=[{**row, "sequence_id": unique_sequence} for row in scenario.ground_truth],
+                ground_truth_path=scenario.ground_truth_path,
                 faults=scenario.faults,
                 scoreable_roi=scenario.scoreable_roi,
             )
@@ -482,6 +485,7 @@ def _load_unique_scenarios(
             root=scenario.root,
             frames=[replace(frame, sequence_id=run_sequence) for frame in scenario.frames],
             ground_truth=[{**row, "sequence_id": run_sequence} for row in scenario.ground_truth],
+            ground_truth_path=scenario.ground_truth_path,
             faults=scenario.faults,
             scoreable_roi=scenario.scoreable_roi,
         )

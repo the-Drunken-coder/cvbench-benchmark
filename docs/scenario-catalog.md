@@ -1,6 +1,6 @@
 # Public scenario catalog
 
-`/scenarios/` publishes every scenario referenced by the current benchmark manifests: the exact union is derived at build time and must contain 16 stable IDs (13 synthetic and 3 real video). There is no hidden-current tier. Exact benchmark JPEGs, complete public annotations, fixed scoring boundaries, provenance, licenses, transformation notices, content hashes, and allowlisted first-party baseline summaries are directly inspectable.
+`/scenarios/` publishes every scenario referenced by the current benchmark manifests: the exact union is derived at build time and must contain 26 stable IDs (13 synthetic, 3 MEVA real video, and 10 MOTChallenge pedestrian sequences). There is no hidden-current tier. Exact benchmark frame identities, complete public annotations, fixed scoring boundaries, provenance, licenses, transformation notices, content hashes, deterministic viewer media, and allowlisted first-party baseline summaries are directly inspectable.
 
 All current data can be tuned to or memorized. Private run ordering and runtime isolation prevent future-frame and host-data access while a system is executing; they do not turn recognizable public data into a secret. A future hidden-challenge design is outside catalog Version 1.
 
@@ -11,6 +11,7 @@ All current data can be tuned to or memorized. Private run ordering and runtime 
 - `/scenario-catalog/v1/scenarios/{stable-id}.json` is a stable scenario detail document.
 - `/scenario-catalog/v1/{frame,annotation,baseline}-manifests/sha256/{sha256}.json` contains immutable content-addressed manifests.
 - `/scenario-catalog/v1/assets/sha256/{sha256}.jpg` contains an immutable exact benchmark frame.
+- Content-addressed `.mp4` and `.jsonl.gz` assets contain MOTChallenge viewer derivatives and complete normalized annotation bundles. The exact JPEG manifest exposes every benchmark frame hash; the derivative never claims original container PTS.
 
 Indexes and stable detail documents revalidate. Content-addressed media and manifests use a one-year immutable browser cache policy.
 Unknown catalog JSON and JPEG paths return honest `404` responses with machine-appropriate MIME types and no immutable cache. Human navigation keeps `/scenarios/` as its stable entry point and uses the site's explicit `404.html` for unknown pages.
@@ -23,7 +24,7 @@ From `control-plane/`:
 npm ci
 ```
 
-The `postinstall` build writes only to `control-plane/dist`. It derives mechanical fields from the current benchmark manifests and their referenced scenario manifests. `scenario-catalog/metadata.yaml` is deliberately limited to titles, descriptions, failure modes, source attribution, and transformation notes. `scenario-catalog/baselines.json` binds each scenario to one of three committed, sanitized evidence manifests. The builder hashes those sources, reconciles every derived summary, and publishes only their allowlisted fields; raw run reports are not copied into the site.
+The `postinstall` build writes only to `control-plane/dist`. It derives mechanical fields from the current benchmark manifests and their referenced scenario manifests. `scenario-catalog/metadata.yaml` is deliberately limited to titles, descriptions, failure modes, source attribution, and transformation notes. `scenario-catalog/baselines.json` binds each scenario to committed, sanitized evidence. The builder hashes those sources, reconciles every derived summary, and publishes only their allowlisted fields; raw run reports are not copied into the site.
 
 The build rejects a benchmark/catalog set mismatch, non-public status, unknown or private-looking source fields, path traversal, a symlink in any allowlisted path component, undeclared source files or extensions, malformed or out-of-frame geometry, annotation classes outside a declared scenario ontology, non-contiguous frames, sequence/timestamp mismatch, JPEG dimension mismatch, hash mismatch, and private-artifact filename patterns. It completes this preflight before replacing output, and accepts only `control-plane/dist` or a direct `dist-test-*` directory. Three committed, size-limited frame archives must expand to exactly the 450 names and bytes in `scenarios/real-video-v2/expected-frame-sha256.txt`; synthetic media is read from the benchmark scenario directories. Identical frame bytes share one content-addressed asset.
 
@@ -33,7 +34,7 @@ Limits enforced by the build are:
 - each JPEG at or below the recommended 2 MiB;
 - catalog JSON at or below 256 KiB;
 - each scenario JSON at or below 512 KiB;
-- complete initial catalog output at or below 50 MiB.
+- complete initial catalog output at or below 100 MiB.
 
 Two clean builds must have the same sorted relative paths and identical bytes. `build-evidence.json` records every generated path, size, and SHA-256, and tests independently recompute them.
 
@@ -46,6 +47,8 @@ The viewer creates all untrusted text with `textContent` and numeric SVG attribu
 ## Scoring disclosure
 
 Current scoring is class-aware. Synthetic annotations are exhaustive, and `synthetic-false-detection` deliberately has no targets. The three real-video-v2 scenarios exhaustively annotate every supported visible moving person, vehicle, or dog across the complete image at the native 30 FPS cadence. They have no ROI or ignore rows: misses, duplicate predictions, false tracks, and background predictions anywhere in the frame are penalized, while HOTA and IDF1 measure detection and temporal identity association. Synthetic scenarios retain scenario-specific target and ignore constructs where those deterministic tests require them; target matching precedes ignore matching, `ignore_region` requires at least 50% prediction-area coverage, and ordinary ignore matching requires IoU greater than or equal to 0.5.
+
+The MOTChallenge pack scores marked class-1 pedestrians exhaustively over the full frame. Target matching occurs first; official non-target rows are evaluator-only neutral ignore and are never delivered to submitted systems. HOTA, IDF1, identity switches, fragmentation, misses, and false tracks are reported. These are known-public-corpus CVBench results, not unseen generalization and not official MOTChallenge scoring.
 
 Public overlays are inspection aids only. The runner sends a submitted system progressive current-frame JPEG bytes and timestamps; it never sends boxes, track identities, ignore masks, annotations, future frames, or object-selection hints.
 
@@ -67,4 +70,4 @@ The design uses the existing Worker Static Assets binding and generated `dist` d
 - <https://developers.cloudflare.com/workers/static-assets/binding/>
 - <https://developers.cloudflare.com/workers/static-assets/headers/>
 
-The catalog is comfortably within those limits and therefore does not need R2 or encoded video.
+The catalog remains within those limits. MOTChallenge uses small deterministic H.264 viewer derivatives and compressed full annotations while preserving exact benchmark JPEG identities through the pinned per-frame hash manifest.

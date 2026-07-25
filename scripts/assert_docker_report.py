@@ -8,9 +8,9 @@ from pathlib import Path
 def _parse_mode(argv: list[str]) -> str:
     if len(argv) == 2:
         return "synthetic"
-    if len(argv) == 3 and argv[2] in {"--combined", "--real-video"}:
+    if len(argv) == 3 and argv[2] in {"--combined", "--motchallenge", "--real-video"}:
         return argv[2].removeprefix("--")
-    raise SystemExit("usage: assert_docker_report.py RUNS [--combined|--real-video]")
+    raise SystemExit("usage: assert_docker_report.py RUNS [--combined|--motchallenge|--real-video]")
 
 
 def main() -> None:
@@ -21,16 +21,41 @@ def main() -> None:
     report = json.loads(reports[0].read_text())
     isolation = report["runtime_isolation"]
     assert report["outcome"]["status"] == "completed", report["outcome"]
-    assert report["metrics"]["sample_counts"]["matches"] > 0
     if mode == "real-video":
+        assert report["metrics"]["sample_counts"]["matches"] > 0
         assert report["benchmark"]["id"] == "real-video-full-frame-mot"
         assert report["benchmark"]["version"] == "2.0.0"
         assert report["metrics"]["multi_object_tracking"]["hota"] >= 0
         assert report["metrics"]["multi_object_tracking"]["idf1"] >= 0
         assert report["metrics"]["sample_counts"]["neutral_ignored_predictions"] == 0
+    elif mode == "motchallenge":
+        assert report["benchmark"] == {"id": "motchallenge-known-public-corpus", "version": "1.0.0"}
+        scenarios = report["provenance"]["comparison_inputs"]["scenarios"]
+        assert [scenario["id"] for scenario in scenarios] == [
+            "mot17-02",
+            "mot17-04",
+            "mot17-09",
+            "mot17-10",
+            "mot17-11",
+            "mot17-13",
+            "mot20-01",
+            "mot20-02",
+            "mot20-03",
+            "mot20-05",
+        ]
+        mot = report["metrics"]["multi_object_tracking"]
+        assert mot["hota"] >= 0
+        assert mot["idf1"] >= 0
+        assert mot["macro_average_by_scenario"]["scenario_count"] == 10
+        assert report["metrics"]["identity"]["id_switches"] >= 0
+        assert report["metrics"]["identity"]["track_fragmentation"] >= 0
+        assert report["audit_evidence"]["false_track_segment_count"] >= 0
+        assert mot["identity_false_negatives"] >= 0
+        assert report["metrics"]["sample_counts"]["matches"] >= 0
+        assert mot["identity_false_negatives"] > 0
     elif mode == "combined":
         assert report["benchmark"]["id"] == "public-whole-system-tracking"
-        assert report["benchmark"]["version"] == "2.0.0"
+        assert report["benchmark"]["version"] == "3.0.0"
         scenarios = report["provenance"]["comparison_inputs"]["scenarios"]
         expected_ids = {
             "synthetic-acquisition",
@@ -49,6 +74,16 @@ def main() -> None:
             "rvmot-a1c9",
             "rvmot-b7e2",
             "rvmot-c4f6",
+            "mot17-02",
+            "mot17-04",
+            "mot17-09",
+            "mot17-10",
+            "mot17-11",
+            "mot17-13",
+            "mot20-01",
+            "mot20-02",
+            "mot20-03",
+            "mot20-05",
         }
         assert isinstance(scenarios, list)
         assert len(scenarios) == len(expected_ids)
@@ -57,7 +92,9 @@ def main() -> None:
         assert len(set(scenario_ids)) == len(scenario_ids)
         assert set(scenario_ids) == expected_ids
         assert report["metrics"]["multi_object_tracking"]["hota"] >= 0
+        assert report["metrics"]["multi_object_tracking"]["identity_false_negatives"] > 0
     else:
+        assert report["metrics"]["sample_counts"]["matches"] > 0
         assert report["metrics"]["identity"]["id_switches"] == 0
     assert isolation["status"] == "verified", isolation
     assert isolation["future_frame_isolation"] is True

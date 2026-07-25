@@ -15,30 +15,45 @@ concurrency:
 jobs:
   lease-and-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # The job budget is the 60-minute pre-lease phase plus the 60-minute
+    # active-run phase. Per-step caps below reserve the second phase.
+    timeout-minutes: 120
     environment: cvbench-production
     env:
       CVBENCH_API_BASE_URL: ${{ vars.CVBENCH_API_BASE_URL }}
       CVBENCH_RUNNER_TOKEN: ${{ secrets.CVBENCH_RUNNER_TOKEN }}
+      CVBENCH_PRE_LEASE_BUDGET_MINUTES: "60"
+      CVBENCH_ACTIVE_RUN_BUDGET_MINUTES: "60"
     steps:
       - name: Check runner configuration
+        timeout-minutes: 1
         run: test -n "$CVBENCH_API_BASE_URL" && test -n "$CVBENCH_RUNNER_TOKEN"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        timeout-minutes: 3
         with:
           ref: refs/heads/main
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        timeout-minutes: 5
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install the trusted CVBench engine
-        run: python -m pip install .
-      - name: Verify and hydrate the public real-video corpus
-        run: python scripts/hydrate_real_video_corpus.py
+      - name: Install the trusted CVBench engine and MOT preparation dependencies
+        timeout-minutes: 10
+        run: |
+          python -m pip install .
+          python -m pip install -r requirements-motchallenge.lock
+      - name: Prepare exact public corpora before leasing
+        timeout-minutes: 35
+        run: |
+          python scripts/hydrate_real_video_corpus.py
+          python scripts/prepare_motchallenge.py --allow-official-download
       - name: Lease and run at most one submission
+        timeout-minutes: 55
         run: python scripts/run_control_plane_job.py
       - name: Force cleanup and assert no benchmark container survives
         if: always()
+        timeout-minutes: 4
         run: |
           docker ps -aq --filter label=cvbench.control-plane-job \
             | xargs --no-run-if-empty docker rm --force

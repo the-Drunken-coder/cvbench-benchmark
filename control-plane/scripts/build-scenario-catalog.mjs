@@ -29,10 +29,11 @@ const STATIC_FILES = [
 const BENCHMARK_FILES = [
   "benchmarks/long-running-stability.yaml",
   "benchmarks/persistent-target-tracking.yaml",
-  "benchmarks/public-whole-system-v2.yaml",
+  "benchmarks/public-whole-system-v3.yaml",
   "benchmarks/real-video-v2.yaml",
+  "benchmarks/motchallenge-v1.yaml",
 ];
-const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".html", ".jpg", ".js", ".json"]);
+const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".gz", ".html", ".jpg", ".js", ".json", ".mp4"]);
 const PRIVATE_PATH_PATTERN = /(?:^|\/)(?:\.dev\.vars|\.env(?:\.|$)|.*(?:credential|secret|contact|note|failure[-_]?packet|raw[-_]?report|d1[-_]?export|private[-_]?log).*)(?:\/|$)/i;
 const PRIVATE_FIELD_PATTERN = /(?:api[-_]?key|token|secret|credential|password|private|local[-_]?path|absolute[-_]?path|contact|notes?|failure[-_]?packet|raw[-_]?report|d1[-_]?(?:export|internal|database|binding)|operator|lease)/i;
 const PRIVATE_CONTENT_PATTERNS = [
@@ -44,7 +45,7 @@ const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 const RECOMMENDED_FRAME_BYTES = 2 * 1024 * 1024;
 const MAX_CATALOG_BYTES = 256 * 1024;
 const MAX_SCENARIO_BYTES = 512 * 1024;
-const MAX_SITE_BYTES = 50 * 1024 * 1024;
+const MAX_SITE_BYTES = 100 * 1024 * 1024;
 const OUTPUT_DIRECTORY_PATTERN = /^dist(?:-test-[a-z0-9][a-z0-9-]*)?$/;
 const ANNOTATION_FIELDS = new Set([
   "bbox_xyxy",
@@ -85,6 +86,11 @@ const SOURCE_FIELDS = new Set([
   "source_url",
   "title",
   "transformation",
+  "archive_provenance",
+  "cadence_disclosure",
+  "license_boundary",
+  "scoring_boundary",
+  "selected_sequence_ids",
 ]);
 const PREPARATION_FIELDS = new Set(["base_image", "expected_frame_manifest", "identity", "platform", "toolchain"]);
 const SCENARIO_METADATA_FIELDS = new Set(["description", "failure_modes", "title"]);
@@ -93,9 +99,13 @@ const METRIC_FIELDS = new Set([
   "false_detections",
   "hota",
   "idf1",
+  "identity_switches",
+  "missed_truths",
   "neutral_ignored_predictions",
   "observed_coverage",
+  "false_track_segments",
   "state_contamination_events",
+  "track_fragmentation",
   "track_id_exhaustion_detected",
   "track_id_reuse_events",
 ]);
@@ -155,6 +165,17 @@ function requiredString(value, label) {
 function requiredSha256(value, label) {
   if (typeof value !== "string" || !/^[a-f0-9]{64}$/.test(value)) fail(`${label} must be a lowercase sha256`);
   return value;
+}
+
+function validateFrameDimensions(frame, label) {
+  if (
+    !Number.isInteger(frame.width)
+    || !Number.isInteger(frame.height)
+    || frame.width <= 0
+    || frame.height <= 0
+  ) {
+    fail(`${label} has invalid frame dimensions`);
+  }
 }
 
 async function assertNoSymlinkComponents(file, allowedRoot) {
@@ -263,7 +284,7 @@ function sanitizeMetadata(metadata, ids) {
   allowedObject(metadata.preparation, PREPARATION_FIELDS, "catalog metadata.preparation");
   for (const field of PREPARATION_FIELDS) requiredString(metadata.preparation[field], `catalog metadata.preparation.${field}`);
   plainObject(metadata.sources, "catalog metadata.sources");
-  const expectedSources = ["rvmot-a1c9", "rvmot-b7e2", "rvmot-c4f6", "synthetic"];
+  const expectedSources = ["motchallenge", "rvmot-a1c9", "rvmot-b7e2", "rvmot-c4f6", "synthetic"];
   if (JSON.stringify(Object.keys(metadata.sources).sort()) !== JSON.stringify(expectedSources)) fail("catalog metadata sources must match the public source allowlist");
   const sources = {};
   for (const key of expectedSources) {
@@ -271,7 +292,7 @@ function sanitizeMetadata(metadata, ids) {
     for (const field of ["attribution", "creator", "license", "source_url", "title", "transformation"]) {
       requiredString(source[field], `catalog metadata.sources.${key}.${field}`);
     }
-    if (key !== "synthetic") {
+    if (key.startsWith("rvmot-")) {
       for (const field of ["annotation_geom_sha256", "annotation_provenance", "annotation_types_sha256", "annotation_url", "corrections", "dataset", "dataset_version", "frame_range", "native_fps", "sequence"]) {
         requiredString(source[field], `catalog metadata.sources.${key}.${field}`);
       }
@@ -333,7 +354,7 @@ async function benchmarkInventory() {
       benchmarkMembership.set(manifest.id, memberships);
     }
   }
-  if (scenarioPaths.size !== 16) fail(`benchmark union must contain 16 scenarios, found ${scenarioPaths.size}`);
+  if (scenarioPaths.size !== 26) fail(`benchmark union must contain 26 scenarios, found ${scenarioPaths.size}`);
   return { benchmarkMembership, scenarioPaths };
 }
 
@@ -347,6 +368,37 @@ async function expectedRealHashes() {
   }
   if (expected.size !== 450) fail(`canonical real-frame manifest must contain 450 entries, found ${expected.size}`);
   return expected;
+}
+
+async function loadMotChallengeEvidence() {
+  const root = path.join(ROOT, "scenarios/motchallenge-v1");
+  const [ingestBody, auditBody, hashesBody] = await Promise.all([
+    readFile(path.join(root, "ingest-manifest.json")),
+    readFile(path.join(root, "visual-audit.json")),
+    readFile(path.join(root, "expected-frame-sha256.txt"), "utf8"),
+  ]);
+  const ingest = JSON.parse(ingestBody);
+  const audit = JSON.parse(auditBody);
+  if (ingest.schema_version !== "cvbench.motchallenge-ingest/v1") fail("invalid MOTChallenge ingest manifest");
+  if (audit.schema_version !== "cvbench.motchallenge-visual-audit/v1" || audit.review_status !== "manual_review_completed") {
+    fail("MOTChallenge visual audit is not complete");
+  }
+  if (audit.manifest_sha256 !== ingest.manifest_sha256 || audit.audit_seed !== ingest.audit_seed) {
+    fail("MOTChallenge visual audit is not bound to the ingest manifest");
+  }
+  const hashes = new Map();
+  for (const line of hashesBody.trim().split("\n")) {
+    const [digest, relative] = line.split("  ");
+    if (!/^[a-f0-9]{64}$/.test(digest) || !/^mot(?:17|20)-\d{2}\/frames\/frame-\d{6}\.jpg$/.test(relative)) {
+      fail("malformed MOTChallenge exact-frame hash manifest");
+    }
+    if (hashes.has(relative)) fail(`duplicate MOTChallenge exact-frame hash: ${relative}`);
+    hashes.set(relative, digest);
+  }
+  if (hashes.size !== 13_410 || ingest.totals?.frames !== 13_410) {
+    fail(`MOTChallenge exact-frame manifest must contain 13410 entries, found ${hashes.size}`);
+  }
+  return { ingest, ingestSha256: sha256(ingestBody), audit, auditSha256: sha256(auditBody), hashes };
 }
 
 function tarString(buffer, start, length) {
@@ -509,6 +561,25 @@ async function publishFrame(output, source, expectedDigest, publishedFrames, lab
   return { bytes: buffer.length, sha256: digest, url: `/${relative}`, dimensions: jpegDimensions(buffer) };
 }
 
+async function publishAsset(output, source, extension, expectedDigest, publishedAssets, label = source) {
+  const body = await readFile(source);
+  const digest = sha256(body);
+  if (expectedDigest && digest !== expectedDigest) {
+    fail(`asset hash mismatch for ${label}: expected ${expectedDigest}, got ${digest}`);
+  }
+  if (body.length > MAX_ASSET_BYTES) fail(`asset exceeds Cloudflare's 25 MiB limit: ${label}`);
+  const relative = `scenario-catalog/v1/assets/sha256/${digest}${extension}`;
+  if (!publishedAssets.has(relative)) {
+    if (output) {
+      const destination = path.join(output, relative);
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, body);
+    }
+    publishedAssets.add(relative);
+  }
+  return { bytes: body.length, sha256: digest, url: `/${relative}` };
+}
+
 function frameInterval(frames) {
   if (frames.length < 2) return { fps: null, interval_ns: null };
   const intervals = frames.slice(1).map((frame, index) => frame.source_timestamp_ns - frames[index].source_timestamp_ns);
@@ -626,7 +697,180 @@ async function loadBaselineEvidence(indexFile, catalogRoot, expectedIds) {
   return result;
 }
 
-async function scenarioDocument({ id, manifestPath, membership, metadata, baseline, expectedHashes, realFrames, output, publishedFrames }) {
+async function motChallengeDocument({
+  id,
+  manifest,
+  membership,
+  metadata,
+  baseline,
+  motEvidence,
+  output,
+  publishedFrames,
+}) {
+  const info = motEvidence.ingest.sequence_results[id];
+  const audit = motEvidence.audit.sequences[id];
+  if (!info || !audit) fail(`missing MOTChallenge ingest or audit evidence for ${id}`);
+  if (audit.selected_frame_count < 60 || audit.selected_track_count !== 12) {
+    fail(`${id} does not satisfy the visual-audit sampling contract`);
+  }
+  const sourceRoot = path.join(ROOT, "scenarios/motchallenge-v1");
+  const video = await publishAsset(
+    output,
+    path.join(ROOT, audit.viewer_derivative.path),
+    ".mp4",
+    audit.viewer_derivative.sha256,
+    publishedFrames,
+    `${id} viewer derivative`,
+  );
+  const poster = await publishAsset(
+    output,
+    path.join(ROOT, audit.overview.path),
+    ".jpg",
+    audit.overview.sha256,
+    publishedFrames,
+    `${id} visual-audit overview`,
+  );
+  const annotationBundle = await publishAsset(
+    output,
+    path.join(ROOT, audit.annotation_bundle.path),
+    ".jsonl.gz",
+    audit.annotation_bundle.sha256,
+    publishedFrames,
+    `${id} normalized annotation bundle`,
+  );
+  const frames = manifest.frames.map((frame, index) => {
+    if (frame.frame_index !== index) fail(`${id} frame indexes are not contiguous`);
+    if (!Number.isInteger(frame.source_timestamp_ns) || frame.source_timestamp_ns < 0) {
+      fail(`${id} has an invalid derived timestamp`);
+    }
+    validateFrameDimensions(frame, `${id} frame ${index}`);
+    const relative = `${id}/frames/frame-${String(index).padStart(6, "0")}.jpg`;
+    const digest = motEvidence.hashes.get(relative);
+    if (!digest) fail(`${id} frame ${index} has no pinned exact-frame hash`);
+    return {
+      frame_index: index,
+      source_timestamp_ns: frame.source_timestamp_ns,
+      width: frame.width,
+      height: frame.height,
+      sha256: digest,
+    };
+  });
+  if (frames.length !== info.frame_count) fail(`${id} frame cardinality disagrees with ingest evidence`);
+  const timing = frameInterval(frames);
+  if (Math.abs(timing.fps - info.fps) > 0.000001) fail(`${id} derived cadence mismatch`);
+  const frameManifest = await publishContentAddressedJson(output, "frame-manifests", {
+    schema_version: "cvbench.frame-manifest/v1",
+    scenario_id: id,
+    exact_benchmark_sequence: true,
+    delivery: "content-addressed archive hydration; exact JPEG bytes are identified by SHA-256",
+    frames,
+  });
+  const annotationManifest = await publishContentAddressedJson(output, "annotation-manifests", {
+    schema_version: "cvbench.annotation-manifest/v1",
+    scenario_id: id,
+    annotation_policy: {
+      scope: "exhaustive_full_frame_pedestrians_with_neutral_ignore",
+      disclosure: "Class-1 marked pedestrians are scored over the full frame. Official non-target rows are evaluator-only neutral ignore after target matching.",
+    },
+    scoreable_region: { type: "full_frame", bounds: [0, 0, frames[0].width, frames[0].height] },
+    normalized_ground_truth: {
+      ...annotationBundle,
+      content_type: "application/x-ndjson",
+      compression: "gzip",
+      uncompressed_sha256: info.normalized_gt_sha256,
+    },
+    row_counts: {
+      scored_person: info.scored_person_boxes,
+      neutral_ignore: info.neutral_ignore_boxes,
+    },
+  });
+  const baselineManifest = await publishContentAddressedJson(output, "baseline-manifests", {
+    schema_version: "cvbench.scenario-baseline/v1",
+    scenario_id: id,
+    ...baseline,
+  });
+  const source = metadata.sources.motchallenge;
+  return {
+    schema_version: "cvbench.public-scenario/v1",
+    id,
+    stable_id: id,
+    sequence_id: manifest.sequence_id,
+    version: "1.0.0",
+    pack: { id: "motchallenge-v1", version: "1.0.0", status: "public" },
+    status: "public",
+    title: metadata.scenarios[id].title,
+    description: metadata.scenarios[id].description,
+    task: "online class-aware pedestrian multi-object tracking",
+    failure_modes: metadata.scenarios[id].failure_modes,
+    benchmark_membership: [...membership].sort(),
+    media: {
+      exact_benchmark_frame_sequence: true,
+      frame_count: frames.length,
+      duration_ns: frames.at(-1).source_timestamp_ns - frames[0].source_timestamp_ns,
+      fps: info.fps,
+      frame_interval_ns: timing.interval_ns,
+      width: frames[0].width,
+      height: frames[0].height,
+      frame_manifest: frameManifest,
+      viewer_derivative: { ...video, media_type: "video/mp4", publisher_declared_fps: info.fps },
+      visual_audit_overview: { ...poster, media_type: "image/jpeg" },
+    },
+    annotations: {
+      annotation_manifest: annotationManifest,
+      normalized_ground_truth: {
+        ...annotationBundle,
+        content_type: "application/x-ndjson",
+        compression: "gzip",
+        uncompressed_sha256: info.normalized_gt_sha256,
+      },
+      policy: {
+        scope: "exhaustive_full_frame_pedestrians_with_neutral_ignore",
+        disclosure: "Scored class-1 marked pedestrians are exhaustive over the full frame; official non-target rows are neutral evaluator-only ignore.",
+      },
+      scoreable_region: { type: "full_frame", bounds: [0, 0, frames[0].width, frames[0].height] },
+      target_count: info.scored_person_tracks,
+      class_ids: ["person"],
+      object_rows: info.scored_person_boxes,
+      ignore_rows: info.neutral_ignore_boxes,
+      scoring: {
+        class_aware: true,
+        scoreable_region: "full_frame",
+        target_matching_precedes_ignore_matching: true,
+        neutral_ignore_is_evaluator_only: true,
+        duplicate_predictions_penalized: true,
+        background_predictions_penalized: true,
+        temporal_metrics: ["HOTA", "IDF1", "ID switches", "fragmentation", "misses", "false tracks"],
+      },
+    },
+    provenance: {
+      source: Object.fromEntries(Object.keys(source).sort().map((field) => [field, source[field]])),
+      author: "MOTChallenge publishers; normalization and audit by CVBench contributors",
+      preparation: {
+        identity: "cvbench-motchallenge-prep/v1",
+        platform: "portable deterministic Python archive hydration",
+        toolchain: "Python standard library, Pillow, OpenCV, imageio-ffmpeg",
+        dockerfile_sha256: motEvidence.ingestSha256,
+        ingest_manifest: {
+          url: "/scenario-catalog/v1/provenance/motchallenge-ingest.json",
+          sha256: motEvidence.ingestSha256,
+        },
+        visual_audit: {
+          url: "/scenario-catalog/v1/provenance/motchallenge-visual-audit.json",
+          sha256: motEvidence.auditSha256,
+        },
+      },
+    },
+    baseline: {
+      manifest: baselineManifest,
+      system_id: baseline.system_id,
+      system_version: baseline.system_version,
+      validation_status: baseline.validation_status,
+    },
+    public_data_disclosure: "This is known-public-corpus evaluation, not unseen generalization and not official MOTChallenge scoring. Exact benchmark JPEGs hydrate from pinned official archives; the public viewer uses a deterministic derivative at publisher-declared cadence.",
+  };
+}
+
+async function scenarioDocument({ id, manifestPath, membership, metadata, baseline, expectedHashes, realFrames, motEvidence, output, publishedFrames }) {
   const manifest = parseYaml(await readFile(manifestPath, "utf8"));
   allowedObject(manifest, new Set(["annotation_scope", "family", "faults", "frames", "ground_truth", "id", "license", "ontology", "schema_version", "scoreable_roi", "sequence_id", "source"]), `${id} scenario manifest`);
   if (manifest.schema_version !== "cvbench.scenario/v1" || manifest.id !== id) fail(`invalid scenario manifest for ${id}`);
@@ -641,6 +885,7 @@ async function scenarioDocument({ id, manifestPath, membership, metadata, baseli
     requiredString(frame.path, `${id} frame ${index}.path`);
   });
   const real = id.startsWith("rvmot-");
+  const mot = id.startsWith("mot17-") || id.startsWith("mot20-");
   if (real) {
     if (manifest.annotation_scope !== "exhaustive_full_frame_moving_objects") fail(`${id} must declare exhaustive full-frame annotations`);
     if ("scoreable_roi" in manifest) fail(`${id} must not declare a scoreable ROI`);
@@ -649,11 +894,23 @@ async function scenarioDocument({ id, manifestPath, membership, metadata, baseli
       if (frame.source_timestamp_ns !== Math.round(index * 1_000_000_000 / 30)) fail(`${id} must preserve exact 30 FPS timestamps`);
     });
   }
-  const source = metadata.sources[real ? id : "synthetic"];
+  const source = metadata.sources[real ? id : mot ? "motchallenge" : "synthetic"];
   if (!source || source.license !== manifest.license) fail(`license metadata mismatch for ${id}`);
   const scenarioMeta = metadata.scenarios[id];
   if (!scenarioMeta || !Array.isArray(scenarioMeta.failure_modes) || !scenarioMeta.failure_modes.length) fail(`missing curated metadata for ${id}`);
   if (!baseline) fail(`missing allowlisted baseline evidence for ${id}`);
+  if (mot) {
+    return motChallengeDocument({
+      id,
+      manifest,
+      membership,
+      metadata,
+      baseline,
+      motEvidence,
+      output,
+      publishedFrames,
+    });
+  }
 
   const manifestDirectory = path.dirname(manifestPath);
   const localGroundTruth = path.join(manifestDirectory, "ground_truth.jsonl");
@@ -682,7 +939,7 @@ async function scenarioDocument({ id, manifestPath, membership, metadata, baseli
   for (const frame of manifest.frames) {
     if (!Number.isInteger(frame.frame_index) || frame.frame_index !== frames.length) fail(`${id} frame indexes are not contiguous`);
     if (!Number.isInteger(frame.source_timestamp_ns) || frame.source_timestamp_ns < 0) fail(`${id} has an invalid frame timestamp`);
-    if (!Number.isInteger(frame.width) || !Number.isInteger(frame.height)) fail(`${id} has invalid frame dimensions`);
+    validateFrameDimensions(frame, `${id} frame ${frame.frame_index}`);
     let sourcePath;
     let expectedDigest;
     if (real) {
@@ -827,7 +1084,7 @@ async function outputEvidence(output) {
         if (PRIVATE_PATH_PATTERN.test(relative)) fail(`private artifact path in output: ${relative}`);
         const body = await readFile(file);
         if (body.length > MAX_ASSET_BYTES) fail(`published file exceeds 25 MiB: ${relative}`);
-        if (path.extname(relative) !== ".jpg") {
+        if ([".css", ".html", ".js", ".json"].includes(path.extname(relative))) {
           const text = body.toString("utf8");
           for (const pattern of PRIVATE_CONTENT_PATTERNS) {
             if (pattern.test(text)) fail(`private artifact content in output: ${relative}`);
@@ -857,6 +1114,7 @@ async function buildCatalog(output, { metadataSource } = {}) {
   const baselines = await loadBaselineEvidence(path.join(CATALOG_SOURCE, "baselines.json"), CATALOG_SOURCE, ids);
   const expectedHashes = await expectedRealHashes();
   const realFrames = await loadRealFrameArchives(expectedHashes);
+  const motEvidence = await loadMotChallengeEvidence();
   await assertStaticAllowlist();
 
   // Validate every declared record, path, hash, geometry, and size before replacing output.
@@ -870,6 +1128,7 @@ async function buildCatalog(output, { metadataSource } = {}) {
       baseline: baselines[id],
       expectedHashes,
       realFrames,
+      motEvidence,
       output: null,
       publishedFrames: preflightFrames,
     });
@@ -886,6 +1145,18 @@ async function buildCatalog(output, { metadataSource } = {}) {
   }
 
   const publishedFrames = new Set();
+  await publishJson(
+    output,
+    "scenario-catalog/v1/provenance/motchallenge-ingest.json",
+    motEvidence.ingest,
+    MAX_ASSET_BYTES,
+  );
+  await publishJson(
+    output,
+    "scenario-catalog/v1/provenance/motchallenge-visual-audit.json",
+    motEvidence.audit,
+    MAX_ASSET_BYTES,
+  );
   const summaries = [];
   for (const id of ids) {
     const document = await scenarioDocument({
@@ -896,6 +1167,7 @@ async function buildCatalog(output, { metadataSource } = {}) {
       baseline: baselines[id],
       expectedHashes,
       realFrames,
+      motEvidence,
       output,
       publishedFrames,
     });
@@ -968,4 +1240,5 @@ export {
   sanitizeAnnotation,
   sanitizeFault,
   validateBox,
+  validateFrameDimensions,
 };

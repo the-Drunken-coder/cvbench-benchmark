@@ -22,6 +22,7 @@ class Scenario:
     root: Path
     frames: list[Frame]
     ground_truth: list[dict[str, Any]]
+    ground_truth_path: Path | None = None
     faults: list[dict[str, Any]] = field(default_factory=list)
     scoreable_roi: tuple[float, float, float, float] | None = None
 

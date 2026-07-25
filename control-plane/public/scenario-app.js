@@ -107,6 +107,10 @@ function realVideoDetail() {
   return state.detail?.pack?.id === "real-video-v2";
 }
 
+function motChallengeDetail() {
+  return state.detail?.pack?.id === "motchallenge-v1";
+}
+
 function faultLabels(frameIndex) {
   const labels = [];
   for (const fault of state.annotations.faults || []) {
@@ -610,7 +614,9 @@ function renderDetailFacts() {
   appendDefinition(scenario, "Classes", detail.annotations.class_ids.join(", ") || "No targets by design");
   appendDefinition(scenario, "Annotation policy", detail.annotations.policy.disclosure);
   if (detail.annotations.scoring.scoreable_region === "full_frame") {
-    appendDefinition(scenario, "Scoring boundary", "Class-aware, full-frame scoring. Every supported visible mover is exhaustive ground truth; misses, duplicates, false tracks, and background predictions are penalized.");
+    appendDefinition(scenario, "Scoring boundary", detail.pack.id === "motchallenge-v1"
+      ? "Class-aware, full-frame pedestrian scoring. Marked class-1 pedestrians are exhaustive targets; official non-target rows are neutral only after target matching."
+      : "Class-aware, full-frame scoring. Every supported visible mover is exhaustive ground truth; misses, duplicates, false tracks, and background predictions are penalized.");
     appendDefinition(scenario, "Temporal scoring", detail.annotations.scoring.temporal_metrics.join(", "));
   } else {
     appendDefinition(scenario, "Scoring boundary", `Class-aware. ${detail.annotations.scoring.outside_fixed_roi.replaceAll("_", " ")}. Target matching precedes ignore matching.`);
@@ -647,6 +653,11 @@ function renderDetailFacts() {
     ["Content-addressed annotation manifest", detail.annotations.annotation_manifest.url, detail.annotations.annotation_manifest.sha256],
     ["Content-addressed baseline manifest", detail.baseline.manifest.url, detail.baseline.manifest.sha256],
   ];
+  if (detail.media.viewer_derivative) {
+    manifests.push(["Deterministic publisher-cadence viewer derivative", detail.media.viewer_derivative.url, detail.media.viewer_derivative.sha256]);
+    manifests.push(["Normalized full annotation bundle", detail.annotations.normalized_ground_truth.url, detail.annotations.normalized_ground_truth.sha256]);
+    manifests.push(["Visual audit overview", detail.media.visual_audit_overview.url, detail.media.visual_audit_overview.sha256]);
+  }
   for (const [label, url, hash] of manifests) {
     const item = element("li");
     item.append(safeLink(label, url));
@@ -673,7 +684,9 @@ async function loadDetail(id) {
       fetchJson(detail.baseline.manifest.url, signal),
     ]);
     if (detail.id !== id || frames.scenario_id !== id || annotations.scenario_id !== id || baseline.scenario_id !== id) throw new Error("Scenario manifest identity mismatch.");
-    if (frames.frames.length !== annotations.frames.length) throw new Error("Frame and annotation manifest lengths differ.");
+    const mot = detail.pack.id === "motchallenge-v1";
+    if (!mot && frames.frames.length !== annotations.frames.length) throw new Error("Frame and annotation manifest lengths differ.");
+    if (mot && frames.frames.length !== detail.media.frame_count) throw new Error("Exact-frame hash manifest length differs.");
     return { annotations, baseline, detail, frames };
   }, detailFromLocation, ({ annotations, baseline, detail, frames }) => {
     resetFrameCache();
@@ -687,15 +700,32 @@ async function loadDetail(id) {
     byId("detail-description").textContent = detail.description;
     byId("frame-scrubber").max = String(frames.frames.length - 1);
     const real = detail.pack.id === "real-video-v2";
+    const mot = detail.pack.id === "motchallenge-v1";
     byId("objects-overlay-label").querySelector("span").textContent = real ? "Tracked objects" : "Targets";
     byId("ignores-overlay-label").hidden = real;
     byId("region-overlay-label").hidden = real;
-    byId("overlay-disclosure").textContent = real
+    byId("frame-stage").hidden = mot;
+    byId("viewer-controls").hidden = mot;
+    byId("overlay-controls").hidden = mot;
+    byId("frame-inspector").hidden = mot;
+    const video = byId("scenario-video");
+    video.pause();
+    video.hidden = !mot;
+    video.removeAttribute("src");
+    video.removeAttribute("poster");
+    if (mot) {
+      video.src = detail.media.viewer_derivative.url;
+      video.poster = detail.media.visual_audit_overview.url;
+      video.load();
+    }
+    byId("overlay-disclosure").textContent = mot
+      ? "This deterministic public derivative plays ordered JPEGs at publisher-declared 25/30 FPS. It does not represent original container timestamps. Exact frame hashes and full normalized annotations are linked below."
+      : real
       ? "Public whole-scene overlays are human inspection aids. Systems receive only progressive frames and timestamps—never these boxes, identities, annotations, or future frames."
       : "Public overlays are human inspection aids and are never sent to submitted systems.";
     byId("scenario-detail").hidden = false;
     renderDetailFacts();
-    void showFrame(0, false);
+    if (!mot) void showFrame(0, false);
     setCatalogStatus(`${state.catalog.scenario_count} current scenarios are public.`);
     byId("scenario-detail").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   });
@@ -708,7 +738,7 @@ function detailFromLocation() {
 async function init() {
   try {
     state.catalog = await fetchJson("/scenario-catalog/v1/catalog.json");
-    if (state.catalog.scenario_count !== 16 || !state.catalog.all_current_scenarios_public) throw new Error("The catalog completeness assertion failed.");
+    if (state.catalog.scenario_count !== 26 || !state.catalog.all_current_scenarios_public) throw new Error("The catalog completeness assertion failed.");
     byId("scenario-count").textContent = state.catalog.scenario_count;
     renderCatalog();
     const selected = detailFromLocation();

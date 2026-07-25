@@ -55,7 +55,7 @@ jobs:
           cache: pip
       - run: python -m pip install .
       - run: docker build -f examples/Dockerfile.good -t cvbench-example-good:v1 .
-      - name: Fresh-checkout trusted-runner lifecycle
+      - name: Fresh-checkout trusted-runner fail-closed lifecycle
         run: |
           test ! -e data/real-video-v2
           docker run -d --name cvbench-test-registry -p 5000:5000 registry:2
@@ -90,7 +90,7 @@ jobs:
           path: timing-compute-docker-evidence.json
       - name: Assert no scored container remains
         run: test -z "$(docker ps -aq --filter ancestor=cvbench-example-good:v1)"
-      - name: Prepare and score the isolated real-video tranche
+      - name: Score committed real video and verify committed MOT/combined evidence
         run: |
           python -m pip install -r requirements-real-video.lock
           docker build --platform linux/amd64 -f examples/Dockerfile.real-video-prep -t cvbench-real-video-prep:v2 .
@@ -104,18 +104,28 @@ jobs:
           python scripts/assert_docker_report.py real-video-docker-runs --real-video
           python scripts/sanitize_ci_report.py real-video-docker-runs real-video-docker-safe-runs
           python scripts/verify_ci_evidence.py real-video-docker-safe-runs data/real-video-v2/artifacts.sha256
-          cvbench run --benchmark benchmarks/public-whole-system-v2.yaml --system systems/example-good-docker.yaml --output combined-docker-runs
-          python scripts/assert_docker_report.py combined-docker-runs --combined
-          python scripts/sanitize_ci_report.py combined-docker-runs combined-docker-safe-runs
-          python scripts/verify_ci_evidence.py combined-docker-safe-runs data/real-video-v2/artifacts.sha256
+          python scripts/verify_committed_mot_evidence.py \
+            --real-video-manifest data/real-video-v2/artifacts.sha256
           python scripts/evidence_hashes.py docker-evidence.sha256 \
             real-video-docker-safe-runs/*/report.json \
             real-video-docker-safe-runs/*/resources.csv \
-            combined-docker-safe-runs/*/report.json \
-            combined-docker-safe-runs/*/resources.csv \
+            evidence/motchallenge-v1/artifacts.sha256 \
+            evidence/motchallenge-v1/corpora/motchallenge-v1-artifacts.sha256 \
+            evidence/motchallenge-v1/corpora/real-video-v2-artifacts.sha256 \
+            evidence/motchallenge-v1/corpus-manifests.json \
+            evidence/motchallenge-v1/combined/20260724T075153Z-d36caca2/report.json \
+            evidence/motchallenge-v1/combined/20260724T075153Z-d36caca2/resources.csv \
+            evidence/motchallenge-v1/isolated/20260724T073004Z-68fc08ee/report.json \
+            evidence/motchallenge-v1/isolated/20260724T073004Z-68fc08ee/resources.csv \
+            scenario-catalog/evidence/motchallenge-v1.json \
+            scenarios/motchallenge-v1/corrections.jsonl \
+            scenarios/motchallenge-v1/expected-frame-sha256.txt \
+            scenarios/motchallenge-v1/ingest-manifest.json \
+            scenarios/motchallenge-v1/normalized-ground-truth-sha256.txt \
+            scenarios/motchallenge-v1/visual-audit.json \
             data/real-video-v2/artifacts.sha256
           python scripts/evidence_hashes.py docker-evidence.sha256 --verify
-      - name: Upload exact safe real-video and combined Docker evidence
+      - name: Upload exact hermetic public-suite evidence
         uses: actions/upload-artifact@v4
         with:
           name: public-suite-docker-evidence
@@ -123,8 +133,20 @@ jobs:
           path: |
             real-video-docker-safe-runs/*/report.json
             real-video-docker-safe-runs/*/resources.csv
-            combined-docker-safe-runs/*/report.json
-            combined-docker-safe-runs/*/resources.csv
+            evidence/motchallenge-v1/artifacts.sha256
+            evidence/motchallenge-v1/corpora/motchallenge-v1-artifacts.sha256
+            evidence/motchallenge-v1/corpora/real-video-v2-artifacts.sha256
+            evidence/motchallenge-v1/corpus-manifests.json
+            evidence/motchallenge-v1/combined/20260724T075153Z-d36caca2/report.json
+            evidence/motchallenge-v1/combined/20260724T075153Z-d36caca2/resources.csv
+            evidence/motchallenge-v1/isolated/20260724T073004Z-68fc08ee/report.json
+            evidence/motchallenge-v1/isolated/20260724T073004Z-68fc08ee/resources.csv
+            scenario-catalog/evidence/motchallenge-v1.json
+            scenarios/motchallenge-v1/corrections.jsonl
+            scenarios/motchallenge-v1/expected-frame-sha256.txt
+            scenarios/motchallenge-v1/ingest-manifest.json
+            scenarios/motchallenge-v1/normalized-ground-truth-sha256.txt
+            scenarios/motchallenge-v1/visual-audit.json
             data/real-video-v2/artifacts.sha256
             docker-evidence.sha256
       - name: Assert no real-video container remains

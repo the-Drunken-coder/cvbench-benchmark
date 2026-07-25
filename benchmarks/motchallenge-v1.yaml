@@ -1,0 +1,57 @@
+schema_version: cvbench.benchmark/v1
+id: motchallenge-known-public-corpus
+version: 1.0.0
+
+input:
+  mode: online_replay
+  protocol: frame_socket_v1
+  replay_profile: native
+
+output:
+  protocol: jsonl
+  schema: cvbench.track/v1
+
+thresholds:
+  confirmed_track_min_duration_ms: 250
+  visible_dropout_tolerance_ms: 100
+  max_match_center_error_px: 35
+  minimum_match_iou: 0.3
+  ignore_match_iou: 0.5
+  acquisition_deadlines_ms: [100, 250, 500, 1000]
+  latency_deadline_ms: 250
+  high_confidence_threshold: 0.8
+  out_of_bounds: reject
+  class_agnostic: false
+
+# Known-public-corpus evaluation, not an official MOTChallenge score and not a
+# claim of unseen generalization. Target matching runs before evaluator-only
+# neutral-ignore matching. Submitted systems receive current pixels/timestamps
+# only: never GT, labels, detections, ignore geometry, ROI, or future frames.
+scenarios:
+  - ../scenarios/motchallenge-v1/mot17-02/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-04/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-09/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-10/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-11/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-13/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot20-01/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot20-02/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot20-03/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot20-05/scenario.yaml
+
+resources:
+  cpu_limit: 4
+  memory_limit_mb: 2048
+  network_access: false
+
+reporting:
+  generate_json: true
+  generate_html: true
+  generate_failure_packets: false
+
+max_run_seconds: 1500
+max_drain_seconds: 10
+max_output_records: 2000000
+max_output_line_bytes: 1000000
+max_total_output_bytes: 1000000000
+max_output_records_per_second: 10000

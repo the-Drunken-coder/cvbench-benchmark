@@ -21,8 +21,10 @@ from cvbench.reporting import validate_report
 
 try:
     from scripts.hydrate_real_video_corpus import hydrate
+    from scripts.prepare_motchallenge import verify_hydrated as verify_motchallenge
 except ModuleNotFoundError:  # Direct `python scripts/run_control_plane_job.py` execution.
     from hydrate_real_video_corpus import hydrate
+    from prepare_motchallenge import verify_hydrated as verify_motchallenge
 
 IMAGE_PATTERN = re.compile(
     r"^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?/)?"
@@ -41,9 +43,11 @@ SECRET_ENVIRONMENT_KEYS = {
     "GITHUB_TOKEN",
 }
 MAX_CALLBACK_BYTES = 1024 * 1024
+DOCKER_PULL_TIMEOUT_SECONDS = 600
+BENCHMARK_TIMEOUT_SECONDS = 1900
 PUBLIC_BENCHMARK_ID = "public-whole-system-tracking"
-PUBLIC_BENCHMARK_VERSION = "2.0.0"
-PUBLIC_BENCHMARK_MANIFEST = "benchmarks/public-whole-system-v2.yaml"
+PUBLIC_BENCHMARK_VERSION = "3.0.0"
+PUBLIC_BENCHMARK_MANIFEST = "benchmarks/public-whole-system-v3.yaml"
 PUBLIC_TIMING_COMPUTE_CONTRACT = "cvbench.timing-compute/v1"
 PUBLIC_DELIVERY_POLICY = "cvbench.delivery-lossless/v1"
 PUBLIC_REPLAY_PROFILE = "native"
@@ -66,6 +70,16 @@ PUBLIC_SCENARIO_IDS = {
     "rvmot-a1c9",
     "rvmot-b7e2",
     "rvmot-c4f6",
+    "mot17-02",
+    "mot17-04",
+    "mot17-09",
+    "mot17-10",
+    "mot17-11",
+    "mot17-13",
+    "mot20-01",
+    "mot20-02",
+    "mot20-03",
+    "mot20-05",
 }
 
 
@@ -290,11 +304,12 @@ def execute_submission(repository: Path, submission: dict[str, Any], work: Path)
     environment["CVBENCH_DOCKER_JOB_ID"] = job_id
     try:
         hydrate(repository)
+        verify_motchallenge(repository)
         subprocess.run(
             ["docker", "pull", "--platform", "linux/amd64", image],
             cwd=repository,
             env=environment,
-            timeout=600,
+            timeout=DOCKER_PULL_TIMEOUT_SECONDS,
             check=True,
         )
         system_config = work / "submitted-system.json"
@@ -315,7 +330,7 @@ def execute_submission(repository: Path, submission: dict[str, Any], work: Path)
             ],
             cwd=repository,
             env=environment,
-            timeout=1500,
+            timeout=BENCHMARK_TIMEOUT_SECONDS,
             check=True,
         )
         reports = list(runs.glob("*/report.json"))

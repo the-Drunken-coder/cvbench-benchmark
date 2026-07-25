@@ -3,12 +3,17 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.local-ingest/
 dist/
 build/
 *.egg-info/
 runs/
+combined-linux-final-runs/
+motchallenge-docker-runs*/
+motchallenge-linux-*-runs/
 data/real-video-v1/
 data/real-video-v2/
+data/motchallenge-v1/
 reports/real-video-v1/
 .DS_Store
 node_modules/

@@ -61,13 +61,26 @@ try {
     const revalidatedCatalog = await fetch(`${origin}/scenario-catalog/v1/catalog.json`, { headers: { "if-none-match": catalogEtag } });
     assert(revalidatedCatalog.status === 304, "catalog conditional revalidation must remain 304");
   }
-  const detailResponse = await request(catalog.scenarios[0].detail.url);
+  const frameScenario = catalog.scenarios.find(({ id }) => id === "synthetic-acquisition");
+  assert(frameScenario, "catalog must retain the exact-frame synthetic smoke scenario");
+  const detailResponse = await request(frameScenario.detail.url);
   const detail = await detailResponse.json();
   const frameManifest = await (await request(detail.media.frame_manifest.url)).json();
   const frameResponse = await request(frameManifest.frames[0].media.url);
   assert(frameResponse.status === 200, "declared frame preview route must return 200");
   assert(frameResponse.headers.get("content-type") === "image/jpeg", "declared frame preview route must return image/jpeg");
   assert(frameResponse.headers.get("cache-control")?.includes("immutable"), "declared frame preview route must be immutable");
+
+  const motScenario = catalog.scenarios.find(({ id }) => id === "mot17-02");
+  assert(motScenario, "catalog must include the MOTChallenge smoke scenario");
+  const motDetail = await (await request(motScenario.detail.url)).json();
+  const videoResponse = await request(motDetail.media.viewer_derivative.url);
+  assert(videoResponse.status === 200, "declared MOTChallenge video route must return 200");
+  assert(videoResponse.headers.get("content-type") === "video/mp4", "declared MOTChallenge video route must return video/mp4");
+  assert(videoResponse.headers.get("cache-control")?.includes("immutable"), "declared MOTChallenge video route must be immutable");
+  const annotationsResponse = await request(motDetail.annotations.normalized_ground_truth.url);
+  assert(annotationsResponse.status === 200, "declared MOTChallenge annotation bundle route must return 200");
+  assert(annotationsResponse.headers.get("content-type") === "application/gzip", "declared MOTChallenge annotation bundle must return application/gzip");
 
   const missingJson = await request("/scenario-catalog/v1/scenarios/not-present.json");
   assert(missingJson.status === 404, "unknown scenario JSON must return 404");
@@ -77,7 +90,7 @@ try {
   assert(missingFrame.status === 404, "unknown frame must return 404");
   assert(missingFrame.headers.get("content-type") === "image/jpeg", "unknown frame must retain JPEG MIME");
   assert(!missingFrame.headers.get("cache-control")?.includes("immutable"), "unknown frame must not be immutable");
-  const navigation = await request(`/scenarios/?scenario=${catalog.scenarios[0].id}`);
+  const navigation = await request(`/scenarios/?scenario=${motScenario.id}`);
   assert(navigation.status === 200 && navigation.headers.get("content-type")?.includes("text/html"), "scenario navigation must remain available");
   const unknownPage = await request("/not-a-real-page");
   assert(unknownPage.status === 404, "unknown navigation must return the 404 page");

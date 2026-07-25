@@ -1,6 +1,10 @@
 {
   "schema_version": "cvbench.scenario-baseline-index/v1",
   "evidence_sources": {
+    "motchallenge-v1": {
+      "path": "evidence/motchallenge-v1.json",
+      "sha256": "fdc9d46c0b665c3dd702d82985427637802f2161f41cc065bc7d126d0db66e37"
+    },
     "persistent-tracking": {
       "path": "evidence/persistent-tracking.json",
       "sha256": "93d2036fb5f913aa414edb1dfb429415e17c4a412b71b68322148844694afb50"
@@ -15,6 +19,16 @@
     }
   },
   "scenarios": {
+    "mot17-02": { "evidence_id": "motchallenge-v1" },
+    "mot17-04": { "evidence_id": "motchallenge-v1" },
+    "mot17-09": { "evidence_id": "motchallenge-v1" },
+    "mot17-10": { "evidence_id": "motchallenge-v1" },
+    "mot17-11": { "evidence_id": "motchallenge-v1" },
+    "mot17-13": { "evidence_id": "motchallenge-v1" },
+    "mot20-01": { "evidence_id": "motchallenge-v1" },
+    "mot20-02": { "evidence_id": "motchallenge-v1" },
+    "mot20-03": { "evidence_id": "motchallenge-v1" },
+    "mot20-05": { "evidence_id": "motchallenge-v1" },
     "rvmot-a1c9": { "evidence_id": "real-video-v2" },
     "rvmot-b7e2": { "evidence_id": "real-video-v2" },
     "rvmot-c4f6": { "evidence_id": "real-video-v2" },

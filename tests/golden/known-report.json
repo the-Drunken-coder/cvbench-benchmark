@@ -433,6 +433,12 @@
       "idf1": 0.43478260869565216,
       "idf1_match_iou": 0.5,
       "localization_accuracy": 1.0,
+      "macro_average_by_scenario": {
+        "association_accuracy": 0.23611111111111108,
+        "hota": 0.23611111111111108,
+        "idf1": 0.34848484848484845,
+        "scenario_count": 3
+      },
       "schema_version": "cvbench.mot-metrics/v1",
       "tracker_detections": 9,
       "tracker_tracks": 3

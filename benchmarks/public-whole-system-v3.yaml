@@ -1,0 +1,82 @@
+schema_version: cvbench.benchmark/v1
+id: public-whole-system-tracking
+version: 3.0.0
+
+input:
+  mode: online_replay
+  protocol: frame_socket_v1
+  replay_profile: native
+
+output:
+  protocol: jsonl
+  schema: cvbench.track/v1
+
+thresholds:
+  confirmed_track_min_duration_ms: 250
+  visible_dropout_tolerance_ms: 100
+  max_match_center_error_px: 35
+  minimum_match_iou: 0.3
+  ignore_match_iou: 0.5
+  acquisition_deadlines_ms: [100, 250, 500, 1000]
+  latency_deadline_ms: 250
+  high_confidence_threshold: 0.8
+  out_of_bounds: reject
+  class_agnostic: false
+
+# Version 3 preserves every Version 2 scenario and adds exactly the ten
+# approved dense MOTChallenge pedestrian sequences.
+scenarios:
+  - ../scenarios/synthetic-v1/acquisition/scenario.yaml
+  - ../scenarios/synthetic-v1/visible_retention/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_reacquisition/scenario.yaml
+  - ../scenarios/synthetic-v1/multi_target_pair/scenario.yaml
+  - ../scenarios/synthetic-v1/multi_target_identity/scenario.yaml
+  - ../scenarios/synthetic-v1/false_detection/scenario.yaml
+  - ../scenarios/synthetic-v1/resource_stress/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_gap_100ms/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_gap_250ms/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_gap_500ms/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_gap_1000ms/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_gap_2000ms/scenario.yaml
+  - ../scenarios/synthetic-v1/track_id_churn/scenario.yaml
+  - ../scenarios/real-video-v2/rvmot-a1c9/scenario.yaml
+  - ../scenarios/real-video-v2/rvmot-b7e2/scenario.yaml
+  - ../scenarios/real-video-v2/rvmot-c4f6/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-02/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-04/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-09/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-10/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-11/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot17-13/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot20-01/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot20-02/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot20-03/scenario.yaml
+  - ../scenarios/motchallenge-v1/mot20-05/scenario.yaml
+
+resources:
+  cpu_limit: 4
+  memory_limit_mb: 2048
+  network_access: false
+
+reporting:
+  generate_json: true
+  generate_html: true
+  generate_failure_packets: false
+
+long_run_assertions:
+  max_unique_track_ids: 100000
+  min_distinct_physical_target_births: 40
+  max_track_id_reuse_events: 0
+  require_no_track_id_exhaustion: true
+  max_state_contamination_events: 0
+  max_false_positive_accumulation_per_camera_minute: 100000
+  min_interruption_recovery_rate: 1.0
+  max_absolute_latency_drift_ms: 1000
+  max_memory_growth_bytes: 268435456
+
+max_run_seconds: 1800
+max_drain_seconds: 10
+max_output_records: 2500000
+max_output_line_bytes: 1000000
+max_total_output_bytes: 1200000000
+max_output_records_per_second: 10000

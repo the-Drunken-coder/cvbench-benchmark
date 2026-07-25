@@ -1,0 +1,137 @@
+{
+  "schema_version": "cvbench.sanitized-baseline-evidence/v1",
+  "id": "motchallenge-v1",
+  "status": "public",
+  "system": {
+    "id": "empty-output-floor",
+    "name": "Explicit zero-output floor baseline",
+    "version": "v1",
+    "sha256": "e5d390c98783a32207fb9d9fc5905e970198a9972aa47ce03274ee82f96cef9b"
+  },
+  "validation_status": "completed",
+  "benchmark_id": "motchallenge-known-public-corpus",
+  "run_id": "20260724T073004Z-68fc08ee",
+  "report_sha256": "7dc46e36b3eedac5a527cf615dabe504d4f2c1ab7df27bb32be3b4b15f664463",
+  "scenarios": {
+    "mot17-02": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 18581,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot17-04": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 47557,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot17-09": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 5325,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot17-10": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 12836,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot17-11": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 9436,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot17-13": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 11642,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot20-01": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 19870,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot20-02": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 154742,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot20-03": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 313658,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    },
+    "mot20-05": {
+      "association_accuracy": 0,
+      "false_detections": 0,
+      "false_track_segments": 0,
+      "hota": 0,
+      "idf1": 0,
+      "identity_switches": 0,
+      "missed_truths": 646344,
+      "neutral_ignored_predictions": 0,
+      "observed_coverage": 0,
+      "track_fragmentation": 0
+    }
+  }
+}
