@@ -206,9 +206,32 @@ def test_execution_timeout_still_runs_unique_label_cleanup(tmp_path: Path) -> No
     assert cleanup.call_args.args[1]["CVBENCH_DOCKER_JOB_ID"] == submission["id"]
 
 
-def test_benchmark_subprocess_timeout_exceeds_public_manifest_limit() -> None:
+def test_benchmark_subprocess_timeout_exceeds_public_manifest_limit(tmp_path: Path) -> None:
+    submission = {
+        "id": "12345678-1234-4123-8123-123456789abc",
+        "image": IMAGE,
+        "argv": ["python", "-m", "tracker"],
+    }
+    benchmark_timeout = subprocess.TimeoutExpired(
+        ["python", "-m", "cvbench.cli", "run"],
+        BENCHMARK_TIMEOUT_SECONDS,
+    )
+    with (
+        patch("scripts.run_control_plane_job.hydrate"),
+        patch("scripts.run_control_plane_job.verify_motchallenge"),
+        patch(
+            "scripts.run_control_plane_job.subprocess.run",
+            side_effect=[MagicMock(), benchmark_timeout],
+        ) as run,
+        patch("scripts.run_control_plane_job.cleanup_benchmark_containers"),
+        pytest.raises(subprocess.TimeoutExpired),
+    ):
+        execute_submission(Path(__file__).resolve().parents[1], submission, tmp_path)
+
     manifest = yaml.safe_load((Path(__file__).resolve().parents[1] / PUBLIC_BENCHMARK_MANIFEST).read_text())
-    assert manifest["max_run_seconds"] < BENCHMARK_TIMEOUT_SECONDS
+    benchmark_call = run.call_args_list[1]
+    assert benchmark_call.kwargs["timeout"] == BENCHMARK_TIMEOUT_SECONDS
+    assert manifest["max_run_seconds"] < benchmark_call.kwargs["timeout"]
 
 
 def test_trusted_workflow_prepares_before_lease_and_preserves_callback_margin() -> None:
@@ -219,9 +242,18 @@ def test_trusted_workflow_prepares_before_lease_and_preserves_callback_margin() 
     assert step_names.index("Prepare exact public corpora before leasing") < step_names.index(
         "Lease and run at most one submission"
     )
+    pre_lease_budget_minutes = int(job["env"]["CVBENCH_PRE_LEASE_BUDGET_MINUTES"])
+    active_run_budget_minutes = int(job["env"]["CVBENCH_ACTIVE_RUN_BUDGET_MINUTES"])
+    preparation_index = step_names.index("Prepare exact public corpora before leasing")
+    lease_index = step_names.index("Lease and run at most one submission")
+    pre_lease_steps = job["steps"][: preparation_index + 1]
+    active_run_steps = job["steps"][lease_index:]
     lease_seconds = int(json.loads((root / "control-plane/wrangler.jsonc").read_text())["vars"]["LEASE_SECONDS"])
-    assert job["timeout-minutes"] * 60 < lease_seconds
-    assert lease_seconds > DOCKER_PULL_TIMEOUT_SECONDS + BENCHMARK_TIMEOUT_SECONDS + 60
+    assert job["timeout-minutes"] == pre_lease_budget_minutes + active_run_budget_minutes
+    assert sum(step["timeout-minutes"] for step in pre_lease_steps) < pre_lease_budget_minutes
+    assert sum(step["timeout-minutes"] for step in active_run_steps) <= active_run_budget_minutes
+    assert active_run_budget_minutes * 60 > DOCKER_PULL_TIMEOUT_SECONDS + BENCHMARK_TIMEOUT_SECONDS + 60
+    assert lease_seconds > active_run_budget_minutes * 60
 
 
 def test_success_callback_build_failure_is_converted_to_failed(monkeypatch: pytest.MonkeyPatch) -> None:
