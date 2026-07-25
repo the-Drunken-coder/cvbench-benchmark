@@ -45,6 +45,8 @@ See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Metrics
 
 The dense real-video-v2 corpus is documented in [Real-video sources and annotation audit](docs/real-video-sources.md). It contains three native-30-FPS, full-frame clips derived from the CC BY 4.0 MEVA dataset and its upstream per-frame tracking labels. Preparation verifies pinned source and annotation hashes; no unlabeled ordinary video or unreviewed interpolation is benchmark truth.
 
+For model development only, CVBench also provides a fail-closed local importer for user-supplied official BDD100K MOT 2020 train/validation images and labels. It never downloads or commits BDD100K assets, and its output is explicitly excluded from benchmark/evaluation suites. See [BDD100K MOT training corpus](docs/bdd100k-training-corpus.md).
+
 ## Public scenario catalog and control plane
 
 Every scenario referenced by the current benchmark manifests is published at `/scenarios/`: 13 synthetic scenarios and 3 real-video scenarios, with exact benchmark JPEGs, full public annotations, scoring boundaries, provenance, licenses, hashes, and allowlisted first-party baseline summaries. The stable discovery endpoint is `/.well-known/cvbench-scenarios.json`; see [the catalog architecture and build contract](docs/scenario-catalog.md).

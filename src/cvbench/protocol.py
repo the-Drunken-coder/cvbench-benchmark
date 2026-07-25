@@ -125,12 +125,13 @@ def validate_ground_truth(record: Any) -> dict[str, Any]:
     if "visibility_fraction" not in record:
         raise ProtocolError("missing visibility_fraction")
     visibility = record["visibility_fraction"]
-    if visibility is None:
-        if record["occlusion"] != "unknown":
-            raise ProtocolError("unknown visibility requires unknown occlusion")
-    elif not isinstance(visibility, (int, float)) or isinstance(visibility, bool):
+    if visibility is not None and (
+        not isinstance(visibility, (int, float)) or isinstance(visibility, bool)
+    ):
         raise ProtocolError("visibility_fraction has invalid type")
-    elif not math.isfinite(float(visibility)) or not 0 <= float(visibility) <= 1:
+    if visibility is not None and (
+        not math.isfinite(float(visibility)) or not 0 <= float(visibility) <= 1
+    ):
         raise ProtocolError("visibility_fraction must be between zero and one")
     if record["occlusion"] not in OCCLUSION_VALUES:
         raise ProtocolError("invalid occlusion state")
