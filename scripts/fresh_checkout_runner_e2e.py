@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the trusted runner's fail-closed callback from an unhydrated checkout."""
+"""Exercise lease -> trusted Docker run -> scored callback from an unhydrated checkout."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ try:
         PUBLIC_LEADERBOARD_POLICY,
         PUBLIC_REPLAY_PROFILE,
         PUBLIC_REPLAY_RATE,
+        PUBLIC_SCENARIO_IDS,
         PUBLIC_TIMING_COMPUTE_CONTRACT,
     )
 except ModuleNotFoundError:  # Direct `python scripts/fresh_checkout_runner_e2e.py` execution.
@@ -35,6 +36,7 @@ except ModuleNotFoundError:  # Direct `python scripts/fresh_checkout_runner_e2e.
         PUBLIC_LEADERBOARD_POLICY,
         PUBLIC_REPLAY_PROFILE,
         PUBLIC_REPLAY_RATE,
+        PUBLIC_SCENARIO_IDS,
         PUBLIC_TIMING_COMPUTE_CONTRACT,
     )
 
@@ -89,18 +91,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if self.path == f"/api/v1/internal/submissions/{SUBMISSION_ID}/result":
             length = int(self.headers.get("Content-Length", "0"))
             callback = json.loads(self.rfile.read(length))
-            if callback.get("status") == "failed":
-                if (
-                    set(callback) != {"status", "lease_token", "error"}
-                    or callback.get("lease_token") != LEASE_TOKEN
-                    or not isinstance(callback.get("error"), str)
-                    or not 1 <= len(callback["error"]) <= 2000
-                ):
-                    self._json(422, {"error": "invalid failed callback"})
-                    return
-                self.__class__.callback = callback
-                self._json(200, {"accepted": True})
-                return
             report = callback.get("report")
             try:
                 validate_report(report)
@@ -118,11 +108,26 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
 
 def assert_callback(callback: dict[str, Any] | None) -> None:
-    if not callback or callback.get("status") != "failed" or callback.get("lease_token") != LEASE_TOKEN:
-        raise RuntimeError(f"trusted runner did not return a valid fail-closed callback: {callback}")
-    error = callback.get("error")
-    if not isinstance(error, str) or "prepared MOTChallenge corpus is missing" not in error:
-        raise RuntimeError(f"trusted runner returned the wrong clean-checkout failure: {error}")
+    if not callback or callback.get("status") != "succeeded" or callback.get("lease_token") != LEASE_TOKEN:
+        raise RuntimeError(f"trusted runner did not return a successful callback: {callback}")
+    report = callback.get("report", {})
+    if report.get("outcome", {}).get("status") != "completed":
+        raise RuntimeError("callback report is not completed")
+    benchmark = report.get("benchmark", {})
+    if (benchmark.get("id"), benchmark.get("version")) != (PUBLIC_BENCHMARK_ID, PUBLIC_BENCHMARK_VERSION):
+        raise RuntimeError("callback report has the wrong benchmark identity")
+    scenarios = report.get("provenance", {}).get("comparison_inputs", {}).get("scenarios", [])
+    ids = [scenario.get("id") for scenario in scenarios if isinstance(scenario, dict)]
+    if len(ids) != len(PUBLIC_SCENARIO_IDS) or len(set(ids)) != len(ids) or set(ids) != PUBLIC_SCENARIO_IDS:
+        raise RuntimeError("callback report does not contain exactly the 16 public scenarios")
+    isolation = report.get("runtime_isolation", {})
+    if isolation.get("status") != "verified" or isolation.get("ground_truth_access") is not False:
+        raise RuntimeError("callback report did not verify runner isolation")
+    runner = report.get("runner", {})
+    if set(runner) != {"schema_version", "commit", "workflow_run_url", "workflow_name"}:
+        raise RuntimeError("callback report has incomplete trusted-runner metadata")
+    if runner.get("schema_version") != "cvbench.runner/v1":
+        raise RuntimeError("callback report has the wrong trusted-runner metadata version")
 
 
 def main() -> int:
@@ -131,11 +136,8 @@ def main() -> int:
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     hydrated = root / "data" / "real-video-v2"
-    mot_data = root / "data" / "motchallenge-v1"
     if hydrated.exists():
         raise SystemExit("fresh-checkout regression requires data/real-video-v2 to be absent")
-    if mot_data.exists():
-        raise SystemExit("fresh-checkout regression requires data/motchallenge-v1 to be absent")
 
     ControlPlaneHandler.image = args.image
     ControlPlaneHandler.callback = None
@@ -150,25 +152,21 @@ def main() -> int:
         }
     )
     try:
-        completed = subprocess.run(
+        subprocess.run(
             [sys.executable, "scripts/run_control_plane_job.py"],
             cwd=root,
             env=environment,
-            timeout=3600,
-            check=False,
+            timeout=1800,
+            check=True,
         )
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
     assert_callback(ControlPlaneHandler.callback)
-    if completed.returncode != 1:
-        raise RuntimeError(f"trusted runner returned {completed.returncode}, expected fail-closed status 1")
     if not (hydrated / "artifacts.sha256").is_file():
         raise RuntimeError("trusted runner did not deterministically hydrate the public corpus")
-    if mot_data.exists():
-        raise RuntimeError("trusted runner must not download MOTChallenge archives while a lease is active")
-    print("fresh checkout lease -> fail-closed missing-MOT callback verified")
+    print("fresh checkout lease -> 16-scenario Docker score -> callback verified")
     return 0
 
 

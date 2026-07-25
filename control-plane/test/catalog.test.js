@@ -20,7 +20,6 @@ import {
   sanitizeAnnotation,
   sanitizeFault,
   validateBox,
-  validateFrameDimensions,
 } from "../scripts/build-scenario-catalog.mjs";
 
 const CONTROL_PLANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -65,8 +64,8 @@ test("two clean catalog builds are byte-identical and within budgets", async (co
   const firstSummary = build("dist-test-a");
   const secondSummary = build("dist-test-b");
   assert.deepEqual({ ...firstSummary, output: null }, { ...secondSummary, output: null });
-  assert.equal(firstSummary.scenarios, 26);
-  assert.ok(firstSummary.bytes < 100 * 1024 * 1024);
+  assert.equal(firstSummary.scenarios, 16);
+  assert.ok(firstSummary.bytes < 50 * 1024 * 1024);
   const firstFiles = await filesBelow(first);
   const secondFiles = await filesBelow(second);
   assert.deepEqual(firstFiles, secondFiles);
@@ -84,11 +83,11 @@ test("catalog equals the benchmark union and every published hash verifies", asy
   const catalogBody = await readFile(path.join(output, "scenario-catalog/v1/catalog.json"));
   const catalog = JSON.parse(catalogBody);
   assert.ok(catalogBody.length < 256 * 1024);
-  assert.equal(catalog.scenario_count, 26);
+  assert.equal(catalog.scenario_count, 16);
   assert.equal(catalog.all_current_scenarios_public, true);
 
   const expected = new Set();
-  for (const filename of ["long-running-stability.yaml", "persistent-target-tracking.yaml", "public-whole-system-v3.yaml", "real-video-v2.yaml", "motchallenge-v1.yaml"]) {
+  for (const filename of ["long-running-stability.yaml", "persistent-target-tracking.yaml", "public-whole-system-v2.yaml", "real-video-v2.yaml"]) {
     const benchmarkPath = path.join(ROOT, "benchmarks", filename);
     const benchmark = parseYaml(await readFile(benchmarkPath, "utf8"));
     for (const declared of benchmark.scenarios) {
@@ -113,20 +112,11 @@ test("catalog equals the benchmark union and every published hash verifies", asy
     const frameManifest = JSON.parse(await readFile(path.join(output, detail.media.frame_manifest.url)));
     const annotationManifest = JSON.parse(await readFile(path.join(output, detail.annotations.annotation_manifest.url)));
     assert.equal(frameManifest.frames.length, summary.frames);
-    if (summary.pack.id === "motchallenge-v1") {
-      assert.equal(annotationManifest.row_counts.scored_person + annotationManifest.row_counts.neutral_ignore, detail.annotations.object_rows + detail.annotations.ignore_rows);
-      for (const frame of frameManifest.frames) assert.match(frame.sha256, /^[a-f0-9]{64}$/);
-      for (const asset of [detail.media.viewer_derivative, detail.media.visual_audit_overview, detail.annotations.normalized_ground_truth]) {
-        const body = await readFile(path.join(output, asset.url));
-        assert.equal(sha256(body), asset.sha256);
-      }
-    } else {
-      assert.equal(annotationManifest.frames.length, summary.frames);
-      for (const frame of frameManifest.frames) {
-        const media = await readFile(path.join(output, frame.media.url));
-        assert.equal(sha256(media), frame.media.sha256);
-        assert.ok(media.length <= 2 * 1024 * 1024);
-      }
+    assert.equal(annotationManifest.frames.length, summary.frames);
+    for (const frame of frameManifest.frames) {
+      const media = await readFile(path.join(output, frame.media.url));
+      assert.equal(sha256(media), frame.media.sha256);
+      assert.ok(media.length <= 2 * 1024 * 1024);
     }
   }
 
@@ -135,27 +125,6 @@ test("catalog equals the benchmark union and every published hash verifies", asy
     const body = await readFile(path.join(output, item.path));
     assert.equal(body.length, item.bytes, item.path);
     assert.equal(sha256(body), item.sha256, item.path);
-  }
-});
-
-test("MOTChallenge catalog entries preserve license, cadence, scoring, and audit boundaries", async (context) => {
-  const output = path.join(CONTROL_PLANE, "dist-test-motchallenge");
-  context.after(async () => rm(output, { recursive: true, force: true }));
-  build("dist-test-motchallenge");
-  for (const id of ["mot17-02", "mot17-04", "mot17-09", "mot17-10", "mot17-11", "mot17-13", "mot20-01", "mot20-02", "mot20-03", "mot20-05"]) {
-    const scenario = JSON.parse(await readFile(path.join(output, `scenario-catalog/v1/scenarios/${id}.json`)));
-    assert.equal(scenario.pack.id, "motchallenge-v1");
-    assert.equal(scenario.provenance.source.license, "CC-BY-NC-SA-3.0");
-    assert.match(scenario.provenance.source.attribution, /noncommercial hobby evaluation/);
-    assert.match(scenario.provenance.source.cadence_disclosure, /Original container PTS is unavailable/);
-    assert.equal(scenario.annotations.policy.scope, "exhaustive_full_frame_pedestrians_with_neutral_ignore");
-    assert.equal(scenario.annotations.scoring.target_matching_precedes_ignore_matching, true);
-    assert.equal(scenario.annotations.scoring.neutral_ignore_is_evaluator_only, true);
-    assert.match(scenario.provenance.preparation.dockerfile_sha256, /^[a-f0-9]{64}$/);
-    assert.deepEqual(scenario.annotations.class_ids, ["person"]);
-    assert.ok(scenario.annotations.object_rows > 0);
-    assert.ok(scenario.annotations.ignore_rows > 0);
-    assert.ok([25, 30].includes(scenario.media.fps));
   }
 });
 
@@ -220,8 +189,6 @@ test("catalog safety helpers reject traversal, symlinks, malformed geometry, has
   await assert.rejects(assertedRegularFile(path.join(linkedDirectory, "nested.jpg"), root), /symlink is not publishable/);
   assert.throws(() => validateBox([0, 0, 11, 10], 10, 10, "box"), /outside/);
   assert.throws(() => validateBox([0, Number.NaN, 5, 5], 10, 10, "box"), /finite/);
-  assert.throws(() => validateFrameDimensions({ width: 0, height: 10 }, "frame"), /invalid frame dimensions/);
-  assert.throws(() => validateFrameDimensions({ width: 10, height: undefined }, "frame"), /invalid frame dimensions/);
   const published = new Set();
   await assert.rejects(publishFrame(root, regular, "0".repeat(64), published), /frame hash mismatch/);
   const output = path.join(temporary, "output");

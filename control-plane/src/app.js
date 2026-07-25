@@ -20,14 +20,14 @@ OPENAPI_REPORT_SCHEMA.properties.timing = { $ref: "#/components/schemas/TimingCo
 
 export const PUBLIC_BENCHMARK = Object.freeze({
   id: "public-whole-system-tracking",
-  version: "3.0.0",
-  manifest: "benchmarks/public-whole-system-v3.yaml",
+  version: "2.0.0",
+  manifest: "benchmarks/public-whole-system-v2.yaml",
   timing_compute_contract: "cvbench.timing-compute/v1",
   delivery_policy: "cvbench.delivery-lossless/v1",
   replay_profile: "native",
   replay_rate: 1,
   leaderboard_policy: "cvbench.pareto/v1",
-  scenario_count: 26,
+  scenario_count: 16,
   scenario_ids: Object.freeze([
     "synthetic-acquisition",
     "synthetic-visible-retention",
@@ -45,16 +45,6 @@ export const PUBLIC_BENCHMARK = Object.freeze({
     "rvmot-a1c9",
     "rvmot-b7e2",
     "rvmot-c4f6",
-    "mot17-02",
-    "mot17-04",
-    "mot17-09",
-    "mot17-10",
-    "mot17-11",
-    "mot17-13",
-    "mot20-01",
-    "mot20-02",
-    "mot20-03",
-    "mot20-05",
   ]),
 });
 
@@ -77,7 +67,7 @@ export function createApp(options) {
     operatorReadKeys: credentialScopesAreValid ? operatorReadKeys : [],
     operatorAdjudicatorCredentials: credentialScopesAreValid ? operatorAdjudicatorCredentials : [],
     maxSubmissionsPerHour: boundedInteger(options.maxSubmissionsPerHour, 20, 1, 1000),
-    leaseSeconds: boundedInteger(options.leaseSeconds, 7200, 60, 7200),
+    leaseSeconds: boundedInteger(options.leaseSeconds, 3000, 60, 7200),
   };
 
   return {

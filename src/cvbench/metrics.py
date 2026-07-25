@@ -248,67 +248,6 @@ def _calculate_mot_metrics(
                     )
         frame_data.append((truths, predictions, similarities))
 
-    if not output_counts:
-        ground_truth_detections = sum(truth_counts.values())
-        threshold_rows = [
-            {
-                "iou_threshold": threshold_integer / 100,
-                "hota": 0.0,
-                "detection_accuracy": 0.0 if ground_truth_detections else 1.0,
-                "association_accuracy": 0.0 if ground_truth_detections else 1.0,
-                "localization_accuracy": 0.0 if ground_truth_detections else 1.0,
-                "true_positives": 0,
-                "false_negatives": ground_truth_detections,
-                "false_positives": 0,
-            }
-            for threshold_integer in range(5, 100, 5)
-        ]
-        result = {
-            "schema_version": "cvbench.mot-metrics/v1",
-            "class_aware": True,
-            "ground_truth_detections": ground_truth_detections,
-            "tracker_detections": 0,
-            "ground_truth_tracks": len(truth_counts),
-            "tracker_tracks": 0,
-            "hota": 0.0 if ground_truth_detections else 1.0,
-            "detection_accuracy": 0.0 if ground_truth_detections else 1.0,
-            "association_accuracy": 0.0 if ground_truth_detections else 1.0,
-            "localization_accuracy": 0.0 if ground_truth_detections else 1.0,
-            "hota_by_iou_threshold": threshold_rows,
-            "idf1": 0.0 if ground_truth_detections else 1.0,
-            "identity_true_positives": 0,
-            "identity_false_negatives": ground_truth_detections,
-            "identity_false_positives": 0,
-            "idf1_match_iou": 0.5,
-        }
-        if include_scenario_breakdown:
-            scenario_families = scenario_families or {}
-            counts: dict[str, Counter[str]] = defaultdict(Counter)
-            for (sequence_id, class_id, target_id), detections in truth_counts.items():
-                family = scenario_families.get(sequence_id, sequence_id)
-                counts[family]["detections"] += detections
-                counts[family][f"track:{sequence_id}:{class_id}:{target_id}"] = 1
-            result["by_scenario"] = {
-                family: {
-                    "association_accuracy": 0.0,
-                    "ground_truth_detections": values["detections"],
-                    "ground_truth_tracks": sum(key.startswith("track:") for key in values),
-                    "hota": 0.0,
-                    "idf1": 0.0,
-                    "tracker_detections": 0,
-                    "tracker_tracks": 0,
-                }
-                for family, values in sorted(counts.items())
-            }
-            scenario_count = len(result["by_scenario"])
-            result["macro_average_by_scenario"] = {
-                "scenario_count": scenario_count,
-                "hota": 0.0 if scenario_count else 1.0,
-                "idf1": 0.0 if scenario_count else 1.0,
-                "association_accuracy": 0.0 if scenario_count else 1.0,
-            }
-        return result
-
     alignment = {
         pair: value / (truth_counts[pair[0]] + output_counts[pair[1]] - value)
         for pair, value in potential.items()
@@ -429,15 +368,6 @@ def _calculate_mot_metrics(
                     "tracker_tracks",
                 )
             }
-        scenario_rows = list(result["by_scenario"].values())
-        result["macro_average_by_scenario"] = {
-            "scenario_count": len(scenario_rows),
-            "hota": statistics.fmean(row["hota"] for row in scenario_rows) if scenario_rows else 1.0,
-            "idf1": statistics.fmean(row["idf1"] for row in scenario_rows) if scenario_rows else 1.0,
-            "association_accuracy": statistics.fmean(row["association_accuracy"] for row in scenario_rows)
-            if scenario_rows
-            else 1.0,
-        }
     return result
 
 
