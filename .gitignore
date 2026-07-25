@@ -7,6 +7,8 @@ dist/
 build/
 *.egg-info/
 runs/
+.local-ingest/motchallenge/
+data/motchallenge-training-v1/
 data/real-video-v1/
 data/real-video-v2/
 reports/real-video-v1/

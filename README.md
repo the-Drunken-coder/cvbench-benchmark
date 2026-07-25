@@ -45,6 +45,12 @@ See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Metrics
 
 The dense real-video-v2 corpus is documented in [Real-video sources and annotation audit](docs/real-video-sources.md). It contains three native-30-FPS, full-frame clips derived from the CC BY 4.0 MEVA dataset and its upstream per-frame tracking labels. Preparation verifies pinned source and annotation hashes; no unlabeled ordinary video or unreviewed interpolation is benchmark truth.
 
+For model development only, CVBench can import user-supplied official
+MOTChallenge archives for MOT17/MOT20 as an ignored external corpus. See
+[External MOT17/MOT20 training corpus](docs/motchallenge-training-corpus.md).
+The importer performs no downloads and does not add those sequences to public
+or scored benchmarks.
+
 ## Public scenario catalog and control plane
 
 Every scenario referenced by the current benchmark manifests is published at `/scenarios/`: 13 synthetic scenarios and 3 real-video scenarios, with exact benchmark JPEGs, full public annotations, scoring boundaries, provenance, licenses, hashes, and allowlisted first-party baseline summaries. The stable discovery endpoint is `/.well-known/cvbench-scenarios.json`; see [the catalog architecture and build contract](docs/scenario-catalog.md).
