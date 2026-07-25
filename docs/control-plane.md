@@ -88,7 +88,18 @@ CVBENCH_REPORT_PATH=/absolute/path/to/report.json \
 npm run test:d1
 ```
 
-The Linux CI `docker-scored-e2e` builds the synthetic and real-video baseline images, prepares and hash-verifies both dense corpora, runs the isolated ten-sequence MOT benchmark and the complete public 26-scenario manifest through the Docker-isolated engine, asserts HOTA/IDF1 and exact benchmark identity, and checks the tested containers are gone. Together with the Worker lifecycle tests, this covers public queue assignment through isolated execution and a benchmark-bound callback.
+The Linux CI `docker-scored-e2e` runs the fresh-checkout trusted-runner
+fail-closed lifecycle, synthetic Docker scoring, timing/accounting probes, and
+an isolated MEVA score from committed inputs. The same required job verifies
+the committed native-Linux ten-sequence MOT and complete 26-scenario reports
+against exact schemas, Docker isolation/accounting fields, provenance/license
+boundaries, deterministic scenario/catalog/frame/ground-truth hashes, and both
+corpus artifact manifests. This keeps ordinary PR CI hermetic without silently
+dropping the full-suite evidence contract. Operators with the three pinned
+official archives can reproduce the full native-Linux scoring packet with
+`scripts/run_trusted_mot_evidence.sh`; an unreachable upstream is never accepted
+as ingest success. Together with the Worker lifecycle tests, this covers public
+queue assignment through isolated execution and a benchmark-bound callback.
 
 ## Production with Cloudflare Workers Builds
 

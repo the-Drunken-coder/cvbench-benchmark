@@ -57,4 +57,24 @@ python scripts/prepare_motchallenge.py --verify
 python scripts/audit_motchallenge.py --review-status manual_review_completed
 ```
 
+For a trusted native-Linux replay of the isolated MOT benchmark and the complete
+26-scenario public suite, use a clean evidence directory:
+
+```bash
+scripts/run_trusted_mot_evidence.sh trusted-mot-evidence
+```
+
+That operator command requires the three already-provisioned official archives,
+verifies their pinned bytes, hydrates both corpora, runs the real Docker-isolated
+scoring lifecycle, sanitizes the reports, and hashes the resulting evidence. It
+does not download archives or update committed evidence.
+
+Ordinary pull-request CI is intentionally hermetic. It performs a fresh Docker
+lifecycle and scored synthetic/MEVA runs from committed inputs, then
+mandatorily verifies the committed native-Linux MOT and combined reports against
+their exact report schemas, isolation/accounting contracts, provenance and
+license boundaries, catalog/frame/ground-truth hashes, and both corpus artifact
+manifest fingerprints. CI never treats an unavailable official host as success;
+network ingest is outside that unprovisioned clean-checkout job.
+
 Exploded media and normalized runtime data remain ignored under `data/motchallenge-v1/`. Committed evidence includes the pinned ingest manifest, exact per-frame hashes, normalized-GT hashes, machine-auditable corrections, public compressed annotations, deterministic viewer derivatives, and the 60-frame/12-track-per-sequence visual audit.
