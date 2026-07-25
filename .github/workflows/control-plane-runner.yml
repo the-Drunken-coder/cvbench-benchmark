@@ -15,7 +15,7 @@ concurrency:
 jobs:
   lease-and-run:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 110
     environment: cvbench-production
     env:
       CVBENCH_API_BASE_URL: ${{ vars.CVBENCH_API_BASE_URL }}
@@ -31,10 +31,14 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install the trusted CVBench engine
-        run: python -m pip install .
-      - name: Verify and hydrate the public real-video corpus
-        run: python scripts/hydrate_real_video_corpus.py
+      - name: Install the trusted CVBench engine and MOT preparation dependencies
+        run: |
+          python -m pip install .
+          python -m pip install -r requirements-motchallenge.lock
+      - name: Prepare exact public corpora before leasing
+        run: |
+          python scripts/hydrate_real_video_corpus.py
+          python scripts/prepare_motchallenge.py --allow-official-download
       - name: Lease and run at most one submission
         run: python scripts/run_control_plane_job.py
       - name: Force cleanup and assert no benchmark container survives

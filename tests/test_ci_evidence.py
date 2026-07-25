@@ -95,6 +95,25 @@ def test_safe_report_and_resources_are_accepted(tmp_path: Path, monkeypatch: pyt
     main()
 
 
+def test_safe_evidence_accepts_and_validates_multiple_corpus_manifests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runs, _report = _generated_run(tmp_path)
+    safe_run = sanitize_runs(runs, tmp_path / "safe")
+    first = tmp_path / "first.sha256"
+    second = tmp_path / "second.sha256"
+    first.write_text("a" * 64 + "  first/frame.jpg\n")
+    second.write_text("b" * 64 + "  second/frame.jpg\n")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["verify_ci_evidence.py", str(safe_run.parent), str(first), str(second)],
+    )
+    main()
+    second.write_text("not-a-hash  second/frame.jpg\n")
+    with pytest.raises(AssertionError):
+        main()
+
+
 def test_evidence_hash_manifest_binds_exact_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "report.json").write_text('{"outcome":"completed"}\n')

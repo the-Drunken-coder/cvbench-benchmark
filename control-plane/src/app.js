@@ -77,7 +77,7 @@ export function createApp(options) {
     operatorReadKeys: credentialScopesAreValid ? operatorReadKeys : [],
     operatorAdjudicatorCredentials: credentialScopesAreValid ? operatorAdjudicatorCredentials : [],
     maxSubmissionsPerHour: boundedInteger(options.maxSubmissionsPerHour, 20, 1, 1000),
-    leaseSeconds: boundedInteger(options.leaseSeconds, 3000, 60, 7200),
+    leaseSeconds: boundedInteger(options.leaseSeconds, 7200, 60, 7200),
   };
 
   return {

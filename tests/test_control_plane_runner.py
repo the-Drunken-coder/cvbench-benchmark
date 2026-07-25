@@ -6,12 +6,15 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from cvbench.audit import build_audit_evidence
 from cvbench.config import Thresholds
 from cvbench.json_contract import serialized_json_bytes
 from cvbench.metrics import calculate_metrics
 from scripts.run_control_plane_job import (
+    BENCHMARK_TIMEOUT_SECONDS,
+    DOCKER_PULL_TIMEOUT_SECONDS,
     IMAGE_PATTERN,
     MAX_CALLBACK_BYTES,
     PUBLIC_BENCHMARK_ID,
@@ -188,10 +191,10 @@ def test_execution_timeout_still_runs_unique_label_cleanup(tmp_path: Path) -> No
     }
     with (
         patch("scripts.run_control_plane_job.hydrate"),
-        patch("scripts.run_control_plane_job.hydrate_motchallenge"),
+        patch("scripts.run_control_plane_job.verify_motchallenge"),
         patch(
             "scripts.run_control_plane_job.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(["docker", "pull"], 600),
+            side_effect=subprocess.TimeoutExpired(["docker", "pull"], DOCKER_PULL_TIMEOUT_SECONDS),
         ),
         patch("scripts.run_control_plane_job.cleanup_benchmark_containers") as cleanup,
         pytest.raises(subprocess.TimeoutExpired),
@@ -201,6 +204,24 @@ def test_execution_timeout_still_runs_unique_label_cleanup(tmp_path: Path) -> No
     cleanup.assert_called_once()
     assert cleanup.call_args.args[0] == submission["id"]
     assert cleanup.call_args.args[1]["CVBENCH_DOCKER_JOB_ID"] == submission["id"]
+
+
+def test_benchmark_subprocess_timeout_exceeds_public_manifest_limit() -> None:
+    manifest = yaml.safe_load((Path(__file__).resolve().parents[1] / PUBLIC_BENCHMARK_MANIFEST).read_text())
+    assert manifest["max_run_seconds"] < BENCHMARK_TIMEOUT_SECONDS
+
+
+def test_trusted_workflow_prepares_before_lease_and_preserves_callback_margin() -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.safe_load((root / ".github/workflows/control-plane-runner.yml").read_text())
+    job = workflow["jobs"]["lease-and-run"]
+    step_names = [step.get("name") for step in job["steps"]]
+    assert step_names.index("Prepare exact public corpora before leasing") < step_names.index(
+        "Lease and run at most one submission"
+    )
+    lease_seconds = int(json.loads((root / "control-plane/wrangler.jsonc").read_text())["vars"]["LEASE_SECONDS"])
+    assert job["timeout-minutes"] * 60 < lease_seconds
+    assert lease_seconds > DOCKER_PULL_TIMEOUT_SECONDS + BENCHMARK_TIMEOUT_SECONDS + 60
 
 
 def test_success_callback_build_failure_is_converted_to_failed(monkeypatch: pytest.MonkeyPatch) -> None:

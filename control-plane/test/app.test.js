@@ -30,7 +30,7 @@ beforeEach(() => {
       "operator/bob": OPERATOR_SECOND_WRITE_TOKEN,
     },
     maxSubmissionsPerHour: 2,
-    leaseSeconds: 3000,
+    leaseSeconds: 7200,
   });
 });
 
@@ -716,14 +716,14 @@ test("an expired lease cannot complete before maintenance requeues it", async ()
   assert.equal((await jsonRequest(`/api/v1/submissions/${created.id}`)).status, "running");
 });
 
-test("the configured lease accepts a callback through the full 3000-second budget", async () => {
+test("the configured lease accepts a callback through the full 7200-second budget", async () => {
   const realDateNow = Date.now;
   const startedAt = realDateNow();
   try {
     Date.now = () => startedAt;
     const created = await (await submit(validBody(), "lease-budget-0001")).json();
     const leased = await (await lease()).json();
-    assert.equal(Date.parse(leased.lease.expires_at) - Math.floor(startedAt / 1000) * 1000, 3_000_000);
+    assert.equal(Date.parse(leased.lease.expires_at) - Math.floor(startedAt / 1000) * 1000, 7_200_000);
 
     Date.now = () => Date.parse(leased.lease.expires_at);
     const callback = await result(created.id, {

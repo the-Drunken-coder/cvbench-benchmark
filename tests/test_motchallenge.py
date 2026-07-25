@@ -10,7 +10,14 @@ import pytest
 import yaml
 
 from cvbench.scenario import load_scenario
-from scripts.prepare_motchallenge import ARCHIVES, SEQUENCES, _audit_zip, _normalize_gt, _timestamp_ns
+from scripts.prepare_motchallenge import (
+    ARCHIVES,
+    SEQUENCES,
+    _audit_zip,
+    _normalize_gt,
+    _timestamp_ns,
+    verify_hydrated,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "scenarios" / "motchallenge-v1"
@@ -63,7 +70,7 @@ def test_pinned_archive_and_tranche_contract() -> None:
     assert "Original container PTS is unavailable and is not claimed" in manifest["cadence_disclosure"]
 
 
-def test_scenario_order_cardinality_ontology_and_derived_cadence() -> None:
+def test_scenario_order_cardinality_ontology_and_derived_cadence(tmp_path: Path) -> None:
     manifest = json.loads((SOURCE / "ingest-manifest.json").read_text())
     benchmark = yaml.safe_load((ROOT / "benchmarks" / "motchallenge-v1.yaml").read_text())
     declared = []
@@ -80,8 +87,39 @@ def test_scenario_order_cardinality_ontology_and_derived_cadence() -> None:
             _timestamp_ns(index, info["fps"]) for index in range(1, info["frame_count"] + 1)
         ]
     assert declared == IDS
-    loaded = load_scenario(SOURCE / "mot17-02" / "scenario.yaml")
-    assert loaded.ground_truth_path == (ROOT / "data/motchallenge-v1/mot17-02/ground_truth.jsonl").resolve()
+    declared_scenario = yaml.safe_load((SOURCE / "mot17-02" / "scenario.yaml").read_text())
+    declared_ground_truth = (SOURCE / "mot17-02" / declared_scenario["ground_truth"]).resolve()
+    assert declared_ground_truth == (ROOT / "data/motchallenge-v1/mot17-02/ground_truth.jsonl").resolve()
+
+    # Exercise the loader's resolved-path contract without requiring the
+    # content-addressed MOT media pack in a clean source checkout.
+    frame = tmp_path / "frame.jpg"
+    frame.write_bytes(b"test-frame")
+    ground_truth = tmp_path / "ground_truth.jsonl"
+    ground_truth.write_text("")
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "cvbench.scenario/v1",
+                "id": "path-contract",
+                "family": "path-contract",
+                "sequence_id": "path-contract",
+                "ground_truth": ground_truth.name,
+                "frames": [
+                    {
+                        "frame_index": 0,
+                        "source_timestamp_ns": 0,
+                        "width": 1,
+                        "height": 1,
+                        "path": frame.name,
+                    }
+                ],
+            }
+        )
+    )
+    loaded = load_scenario(scenario_path)
+    assert loaded.ground_truth_path == ground_truth.resolve()
 
 
 def test_visual_audit_and_public_annotation_bundles_are_hash_bound() -> None:
@@ -182,3 +220,27 @@ def test_archive_audit_rejects_parent_path_member(tmp_path: Path) -> None:
     declaration = {"bytes": archive_path.stat().st_size, "sha256": _sha256(archive_path.read_bytes())}
     with pytest.raises(RuntimeError, match="unsafe inventory"):
         _audit_zip(archive_path, declaration)
+
+
+def test_hydrated_verifier_binds_exact_inventory_and_bytes(tmp_path: Path) -> None:
+    declarations = tmp_path / "scenarios" / "motchallenge-v1"
+    output = tmp_path / "data" / "motchallenge-v1"
+    frame = output / "mot17-02" / "frames" / "frame-000000.jpg"
+    truth = output / "mot17-02" / "ground_truth.jsonl"
+    frame.parent.mkdir(parents=True)
+    truth.parent.mkdir(parents=True, exist_ok=True)
+    declarations.mkdir(parents=True)
+    frame.write_bytes(b"exact-frame")
+    truth.write_bytes(b'{"exact":"truth"}\n')
+    frame_relative = "mot17-02/frames/frame-000000.jpg"
+    truth_relative = "mot17-02/ground_truth.jsonl"
+    frame_line = f"{_sha256(frame.read_bytes())}  {frame_relative}"
+    truth_line = f"{_sha256(truth.read_bytes())}  {truth_relative}"
+    (declarations / "expected-frame-sha256.txt").write_text(frame_line + "\n")
+    (declarations / "normalized-ground-truth-sha256.txt").write_text(truth_line + "\n")
+    (output / "artifacts.sha256").write_text(f"{truth_line}\n{frame_line}\n")
+
+    assert verify_hydrated(tmp_path) == output
+    frame.write_bytes(b"drifted")
+    with pytest.raises(RuntimeError, match="hash mismatch"):
+        verify_hydrated(tmp_path)

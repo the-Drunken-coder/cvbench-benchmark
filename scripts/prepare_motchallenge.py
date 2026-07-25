@@ -758,6 +758,67 @@ def verify(repo_root: Path, *, ingest: Path | None = None) -> dict[str, Any]:
     return actual
 
 
+def _read_hash_manifest(path: Path) -> dict[str, str]:
+    try:
+        lines = path.read_text().splitlines()
+    except OSError as exc:
+        raise RuntimeError(f"missing prepared MOTChallenge hash manifest: {path}") from exc
+    result: dict[str, str] = {}
+    for line_number, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        digest, separator, relative = line.partition("  ")
+        relative_path = PurePosixPath(relative)
+        if (
+            separator != "  "
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            or not relative
+            or relative_path.is_absolute()
+            or ".." in relative_path.parts
+            or relative in result
+        ):
+            raise RuntimeError(f"invalid MOTChallenge hash manifest entry at {path}:{line_number}")
+        result[relative] = digest
+    if not result:
+        raise RuntimeError(f"empty MOTChallenge hash manifest: {path}")
+    return result
+
+
+def verify_hydrated(repo_root: Path) -> Path:
+    """Fail closed unless the prepared corpus exactly matches committed hashes."""
+    repo_root = repo_root.resolve()
+    output = repo_root / "data" / "motchallenge-v1"
+    if output.is_symlink() or not output.is_dir():
+        raise RuntimeError(f"prepared MOTChallenge corpus is missing: {output}")
+
+    frame_hashes = _read_hash_manifest(repo_root / "scenarios/motchallenge-v1/expected-frame-sha256.txt")
+    truth_hashes = _read_hash_manifest(
+        repo_root / "scenarios/motchallenge-v1/normalized-ground-truth-sha256.txt"
+    )
+    if set(frame_hashes) & set(truth_hashes):
+        raise RuntimeError("committed MOTChallenge hash manifests contain duplicate paths")
+    expected = {**frame_hashes, **truth_hashes}
+    declared = _read_hash_manifest(output / "artifacts.sha256")
+    if declared != expected:
+        raise RuntimeError("prepared MOTChallenge artifact inventory differs from committed hashes")
+
+    entries = list(output.rglob("*"))
+    if any(path.is_symlink() for path in entries):
+        raise RuntimeError("prepared MOTChallenge corpus contains a symlink")
+    actual = {
+        path.relative_to(output).as_posix()
+        for path in entries
+        if path.is_file() and path.name != "artifacts.sha256"
+    }
+    if actual != set(expected):
+        raise RuntimeError("prepared MOTChallenge corpus contains missing or extra artifacts")
+    for relative, digest in expected.items():
+        if _sha256_file(output / relative) != digest:
+            raise RuntimeError(f"prepared MOTChallenge artifact hash mismatch: {relative}")
+    return output
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])

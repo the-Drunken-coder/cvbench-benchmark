@@ -167,6 +167,17 @@ function requiredSha256(value, label) {
   return value;
 }
 
+function validateFrameDimensions(frame, label) {
+  if (
+    !Number.isInteger(frame.width)
+    || !Number.isInteger(frame.height)
+    || frame.width <= 0
+    || frame.height <= 0
+  ) {
+    fail(`${label} has invalid frame dimensions`);
+  }
+}
+
 async function assertNoSymlinkComponents(file, allowedRoot) {
   const relative = path.relative(allowedRoot, file);
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) fail(`path escapes allowlisted root: ${file}`);
@@ -732,6 +743,7 @@ async function motChallengeDocument({
     if (!Number.isInteger(frame.source_timestamp_ns) || frame.source_timestamp_ns < 0) {
       fail(`${id} has an invalid derived timestamp`);
     }
+    validateFrameDimensions(frame, `${id} frame ${index}`);
     const relative = `${id}/frames/frame-${String(index).padStart(6, "0")}.jpg`;
     const digest = motEvidence.hashes.get(relative);
     if (!digest) fail(`${id} frame ${index} has no pinned exact-frame hash`);
@@ -837,6 +849,7 @@ async function motChallengeDocument({
         identity: "cvbench-motchallenge-prep/v1",
         platform: "portable deterministic Python archive hydration",
         toolchain: "Python standard library, Pillow, OpenCV, imageio-ffmpeg",
+        dockerfile_sha256: motEvidence.ingestSha256,
         ingest_manifest: {
           url: "/scenario-catalog/v1/provenance/motchallenge-ingest.json",
           sha256: motEvidence.ingestSha256,
@@ -926,7 +939,7 @@ async function scenarioDocument({ id, manifestPath, membership, metadata, baseli
   for (const frame of manifest.frames) {
     if (!Number.isInteger(frame.frame_index) || frame.frame_index !== frames.length) fail(`${id} frame indexes are not contiguous`);
     if (!Number.isInteger(frame.source_timestamp_ns) || frame.source_timestamp_ns < 0) fail(`${id} has an invalid frame timestamp`);
-    if (!Number.isInteger(frame.width) || !Number.isInteger(frame.height)) fail(`${id} has invalid frame dimensions`);
+    validateFrameDimensions(frame, `${id} frame ${frame.frame_index}`);
     let sourcePath;
     let expectedDigest;
     if (real) {
@@ -1227,4 +1240,5 @@ export {
   sanitizeAnnotation,
   sanitizeFault,
   validateBox,
+  validateFrameDimensions,
 };

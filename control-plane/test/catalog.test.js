@@ -20,6 +20,7 @@ import {
   sanitizeAnnotation,
   sanitizeFault,
   validateBox,
+  validateFrameDimensions,
 } from "../scripts/build-scenario-catalog.mjs";
 
 const CONTROL_PLANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -150,6 +151,7 @@ test("MOTChallenge catalog entries preserve license, cadence, scoring, and audit
     assert.equal(scenario.annotations.policy.scope, "exhaustive_full_frame_pedestrians_with_neutral_ignore");
     assert.equal(scenario.annotations.scoring.target_matching_precedes_ignore_matching, true);
     assert.equal(scenario.annotations.scoring.neutral_ignore_is_evaluator_only, true);
+    assert.match(scenario.provenance.preparation.dockerfile_sha256, /^[a-f0-9]{64}$/);
     assert.deepEqual(scenario.annotations.class_ids, ["person"]);
     assert.ok(scenario.annotations.object_rows > 0);
     assert.ok(scenario.annotations.ignore_rows > 0);
@@ -218,6 +220,8 @@ test("catalog safety helpers reject traversal, symlinks, malformed geometry, has
   await assert.rejects(assertedRegularFile(path.join(linkedDirectory, "nested.jpg"), root), /symlink is not publishable/);
   assert.throws(() => validateBox([0, 0, 11, 10], 10, 10, "box"), /outside/);
   assert.throws(() => validateBox([0, Number.NaN, 5, 5], 10, 10, "box"), /finite/);
+  assert.throws(() => validateFrameDimensions({ width: 0, height: 10 }, "frame"), /invalid frame dimensions/);
+  assert.throws(() => validateFrameDimensions({ width: 10, height: undefined }, "frame"), /invalid frame dimensions/);
   const published = new Set();
   await assert.rejects(publishFrame(root, regular, "0".repeat(64), published), /frame hash mismatch/);
   const output = path.join(temporary, "output");

@@ -21,10 +21,10 @@ from cvbench.reporting import validate_report
 
 try:
     from scripts.hydrate_real_video_corpus import hydrate
-    from scripts.prepare_motchallenge import prepare as hydrate_motchallenge
+    from scripts.prepare_motchallenge import verify_hydrated as verify_motchallenge
 except ModuleNotFoundError:  # Direct `python scripts/run_control_plane_job.py` execution.
     from hydrate_real_video_corpus import hydrate
-    from prepare_motchallenge import prepare as hydrate_motchallenge
+    from prepare_motchallenge import verify_hydrated as verify_motchallenge
 
 IMAGE_PATTERN = re.compile(
     r"^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?/)?"
@@ -43,6 +43,8 @@ SECRET_ENVIRONMENT_KEYS = {
     "GITHUB_TOKEN",
 }
 MAX_CALLBACK_BYTES = 1024 * 1024
+DOCKER_PULL_TIMEOUT_SECONDS = 600
+BENCHMARK_TIMEOUT_SECONDS = 1900
 PUBLIC_BENCHMARK_ID = "public-whole-system-tracking"
 PUBLIC_BENCHMARK_VERSION = "3.0.0"
 PUBLIC_BENCHMARK_MANIFEST = "benchmarks/public-whole-system-v3.yaml"
@@ -302,12 +304,12 @@ def execute_submission(repository: Path, submission: dict[str, Any], work: Path)
     environment["CVBENCH_DOCKER_JOB_ID"] = job_id
     try:
         hydrate(repository)
-        hydrate_motchallenge(repository, allow_official_download=True)
+        verify_motchallenge(repository)
         subprocess.run(
             ["docker", "pull", "--platform", "linux/amd64", image],
             cwd=repository,
             env=environment,
-            timeout=600,
+            timeout=DOCKER_PULL_TIMEOUT_SECONDS,
             check=True,
         )
         system_config = work / "submitted-system.json"
@@ -328,7 +330,7 @@ def execute_submission(repository: Path, submission: dict[str, Any], work: Path)
             ],
             cwd=repository,
             env=environment,
-            timeout=1500,
+            timeout=BENCHMARK_TIMEOUT_SECONDS,
             check=True,
         )
         reports = list(runs.glob("*/report.json"))

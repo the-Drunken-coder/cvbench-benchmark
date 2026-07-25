@@ -473,3 +473,18 @@ def test_empty_output_mot_floor_is_exact_and_scenario_grouped() -> None:
         "scenario_count": 2,
     }
     assert mot["by_scenario"]["scenario-a"]["ground_truth_tracks"] == 1
+
+
+def test_empty_output_mot_floor_keeps_same_id_in_distinct_classes_separate() -> None:
+    person = gt(0, sequence="sequence-a", target="shared-id")
+    vehicle = gt(0, sequence="sequence-a", target="shared-id")
+    vehicle["class_id"] = "vehicle"
+    metrics, _ = calculate_metrics(
+        [person, vehicle],
+        [],
+        Thresholds(),
+        scenario_families={"sequence-a": "scenario-a"},
+    )
+    mot = metrics["multi_object_tracking"]
+    assert mot["ground_truth_tracks"] == 2
+    assert mot["by_scenario"]["scenario-a"]["ground_truth_tracks"] == 2

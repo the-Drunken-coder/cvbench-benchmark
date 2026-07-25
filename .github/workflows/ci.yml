@@ -55,7 +55,7 @@ jobs:
           cache: pip
       - run: python -m pip install .
       - run: docker build -f examples/Dockerfile.good -t cvbench-example-good:v1 .
-      - name: Fresh-checkout trusted-runner lifecycle
+      - name: Fresh-checkout trusted-runner fail-closed lifecycle
         run: |
           test ! -e data/real-video-v2
           docker run -d --name cvbench-test-registry -p 5000:5000 registry:2
@@ -114,7 +114,9 @@ jobs:
           cvbench run --benchmark benchmarks/public-whole-system-v3.yaml --system systems/empty-floor-docker.yaml --output combined-docker-runs
           python scripts/assert_docker_report.py combined-docker-runs --combined
           python scripts/sanitize_ci_report.py combined-docker-runs combined-docker-safe-runs
-          python scripts/verify_ci_evidence.py combined-docker-safe-runs data/real-video-v2/artifacts.sha256
+          python scripts/verify_ci_evidence.py combined-docker-safe-runs \
+            data/real-video-v2/artifacts.sha256 \
+            data/motchallenge-v1/artifacts.sha256
           python scripts/evidence_hashes.py docker-evidence.sha256 \
             real-video-docker-safe-runs/*/report.json \
             real-video-docker-safe-runs/*/resources.csv \

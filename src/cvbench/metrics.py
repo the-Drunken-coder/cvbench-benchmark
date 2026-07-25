@@ -284,10 +284,10 @@ def _calculate_mot_metrics(
         if include_scenario_breakdown:
             scenario_families = scenario_families or {}
             counts: dict[str, Counter[str]] = defaultdict(Counter)
-            for (sequence_id, _class_id, target_id), detections in truth_counts.items():
+            for (sequence_id, class_id, target_id), detections in truth_counts.items():
                 family = scenario_families.get(sequence_id, sequence_id)
                 counts[family]["detections"] += detections
-                counts[family][f"track:{sequence_id}:{target_id}"] = 1
+                counts[family][f"track:{sequence_id}:{class_id}:{target_id}"] = 1
             result["by_scenario"] = {
                 family: {
                     "association_accuracy": 0.0,
