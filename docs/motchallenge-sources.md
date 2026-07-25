@@ -65,9 +65,14 @@ scripts/run_trusted_mot_evidence.sh trusted-mot-evidence
 ```
 
 That operator command requires the three already-provisioned official archives,
-verifies their pinned bytes, hydrates both corpora, runs the real Docker-isolated
-scoring lifecycle, sanitizes the reports, and hashes the resulting evidence. It
-does not download archives or update committed evidence.
+the exact direct dependency versions pinned by both committed lock files, and
+the pre-provisioned `cvbench-example-good:v1` and
+`cvbench-real-video-prep:v2` images. Provision those dependencies and images
+before starting the evidence run. The command performs no package installation
+or image build, verifies the pinned archive bytes, hydrates both corpora, runs
+the real Docker-isolated scoring lifecycle, sanitizes the reports, and hashes
+the resulting evidence. It does not download MOTChallenge archives or update
+committed evidence.
 
 Ordinary pull-request CI is intentionally hermetic. It performs a fresh Docker
 lifecycle and scored synthetic/MEVA runs from committed inputs, then

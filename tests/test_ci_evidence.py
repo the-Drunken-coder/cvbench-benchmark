@@ -168,6 +168,18 @@ def test_trusted_full_scoring_command_requires_local_official_archives() -> None
     assert "data/motchallenge-v1/artifacts.sha256" in script
     assert "--allow-official-download" not in script
     assert "motchallenge.net" not in script
+    assert "pip install" not in script
+    assert "python -m pip" not in script
+    assert "--index-url" not in script
+    assert "docker build" not in script
+    assert "scripts/trusted_mot_environment.py" in script
+    assert "python3 -m cvbench.cli run" in script
+    assert 'export PYTHONPATH="$repo_root/src"' in script
+    environment_check = (root / "scripts/trusted_mot_environment.py").read_text()
+    assert all(
+        lock_file in environment_check
+        for lock_file in ("requirements-real-video.lock", "requirements-motchallenge.lock")
+    )
 
 
 def test_committed_evidence_manifest_cannot_silently_omit_a_required_file(tmp_path: Path) -> None:
