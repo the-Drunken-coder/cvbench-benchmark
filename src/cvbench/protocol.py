@@ -110,12 +110,17 @@ def validate_ground_truth(record: Any) -> dict[str, Any]:
     ignore_region = record.get("ignore_region", False)
     if not isinstance(ignore_region, bool):
         raise ProtocolError("ignore_region must be boolean")
+    ignore_class_agnostic = record.get("ignore_class_agnostic", False)
+    if not isinstance(ignore_class_agnostic, bool):
+        raise ProtocolError("ignore_class_agnostic must be boolean")
     ignore_region_id = record.get("ignore_region_id")
     truncated = record.get("truncated", False)
     if not isinstance(truncated, bool):
         raise ProtocolError("truncated must be boolean")
     if ignore_region and not ignore:
         raise ProtocolError("ignore_region requires ignore=true")
+    if ignore_class_agnostic and not ignore:
+        raise ProtocolError("ignore_class_agnostic requires ignore=true")
     if ignore_region and (not isinstance(ignore_region_id, str) or not ignore_region_id):
         raise ProtocolError("ignore_region requires a non-empty ignore_region_id")
     if ignore_region_id is not None and not isinstance(ignore_region_id, str):
@@ -125,18 +130,20 @@ def validate_ground_truth(record: Any) -> dict[str, Any]:
     if "visibility_fraction" not in record:
         raise ProtocolError("missing visibility_fraction")
     visibility = record["visibility_fraction"]
-    if visibility is None:
-        if record["occlusion"] != "unknown":
-            raise ProtocolError("unknown visibility requires unknown occlusion")
-    elif not isinstance(visibility, (int, float)) or isinstance(visibility, bool):
+    if visibility is not None and (
+        not isinstance(visibility, (int, float)) or isinstance(visibility, bool)
+    ):
         raise ProtocolError("visibility_fraction has invalid type")
-    elif not math.isfinite(float(visibility)) or not 0 <= float(visibility) <= 1:
+    if visibility is not None and (
+        not math.isfinite(float(visibility)) or not 0 <= float(visibility) <= 1
+    ):
         raise ProtocolError("visibility_fraction must be between zero and one")
     if record["occlusion"] not in OCCLUSION_VALUES:
         raise ProtocolError("invalid occlusion state")
     clean = dict(record)
     clean["ignore"] = ignore
     clean["ignore_region"] = ignore_region
+    clean["ignore_class_agnostic"] = ignore_class_agnostic
     clean["truncated"] = truncated
     clean["visibility_fraction"] = visibility
     if record["on_screen"]:

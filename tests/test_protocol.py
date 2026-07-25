@@ -80,14 +80,12 @@ def test_ground_truth_validation() -> None:
         validate_ground_truth(invalid)
 
 
-def test_unknown_real_visibility_is_explicit_and_paired_with_unknown_occlusion() -> None:
+@pytest.mark.parametrize("occlusion", ["none", "partial", "full", "unknown"])
+def test_unknown_visibility_can_preserve_independent_ordinal_occlusion(occlusion: str) -> None:
     record = gt(0)
     record["visibility_fraction"] = None
-    record["occlusion"] = "unknown"
+    record["occlusion"] = occlusion
     assert validate_ground_truth(record)["visibility_fraction"] is None
-    record["occlusion"] = "none"
-    with pytest.raises(ProtocolError, match="unknown visibility"):
-        validate_ground_truth(record)
 
 
 @pytest.mark.parametrize(
@@ -97,6 +95,7 @@ def test_unknown_real_visibility_is_explicit_and_paired_with_unknown_occlusion()
         {**gt(100), "ignore": True, "ignore_region": True},
         {**gt(100), "ignore": True, "ignore_region": True, "ignore_region_id": ""},
         {**gt(100), "ignore": True, "ignore_region_id": "region"},
+        {**gt(100), "ignore": False, "ignore_class_agnostic": True},
     ],
 )
 def test_ignore_region_conditionals_are_enforced(record: dict[str, object]) -> None:
@@ -105,8 +104,15 @@ def test_ignore_region_conditionals_are_enforced(record: dict[str, object]) -> N
 
 
 def test_ignore_region_is_valid_only_with_ignore_and_identifier() -> None:
-    record = {**gt(100), "ignore": True, "ignore_region": True, "ignore_region_id": "region"}
+    record = {
+        **gt(100),
+        "ignore": True,
+        "ignore_region": True,
+        "ignore_class_agnostic": True,
+        "ignore_region_id": "region",
+    }
     assert validate_ground_truth(record)["ignore_region_id"] == "region"
+    assert validate_ground_truth(record)["ignore_class_agnostic"] is True
 
 
 def test_reacquisition_event_is_in_the_track_contract() -> None:

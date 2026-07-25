@@ -36,6 +36,26 @@ def test_class_gate_can_be_configured() -> None:
     assert len(agnostic) == 1
 
 
+def test_class_agnostic_ignore_region_neutralizes_any_output_class() -> None:
+    ignored = {
+        **gt(0, target="ignore", box=[0, 0, 20, 20]),
+        "class_id": "__ignore__",
+        "ignore": True,
+        "ignore_region": True,
+        "ignore_class_agnostic": True,
+        "ignore_region_id": "ignore",
+    }
+    record = output(0, box=[1, 1, 19, 19]).system_record
+
+    observed_matches, continuity_matches, unmatched = match_records_by_support(
+        [ignored], [record], Thresholds()
+    )
+
+    assert observed_matches == []
+    assert continuity_matches == []
+    assert unmatched[0]["neutral_ignored"] is True
+
+
 def test_observation_is_matched_independently_from_better_prediction() -> None:
     observed = output(0, track="observed", box=[1, 0, 11, 10]).system_record
     predicted = output(

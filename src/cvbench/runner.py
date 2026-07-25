@@ -23,7 +23,7 @@ from .collector import OutputCollector
 from .comparison import compare_reports
 from .config import BenchmarkConfig, load_benchmark, load_system
 from .diagnostics import generate_findings
-from .errors import RuntimeFailure
+from .errors import ConfigurationError, RuntimeFailure
 from .evidence import generate_evidence_packets
 from .matching import match_records_by_support
 from .metrics import calculate_metrics
@@ -324,8 +324,10 @@ def _deliver_scenarios(
                 )
                 continue
             payload = frame.path.read_bytes()
+            payload_encoding = frame.payload_encoding
             if any(fault.get("type") == "blackout" for fault in fault_actions):
                 payload = _black_jpeg(frame.width, frame.height)
+                payload_encoding = "jpeg"
                 counters["black_frames"] += 1
             metadata = {
                 "event": "frame",
@@ -337,7 +339,7 @@ def _deliver_scenarios(
                 "width": frame.width,
                 "height": frame.height,
                 "pixel_format": "rgb24",
-                "payload_encoding": "jpeg",
+                "payload_encoding": payload_encoding,
             }
             frame_key = (frame.sequence_id, source_timestamp_ns)
             collector.begin_frame(frame_key, (frame.width, frame.height))
@@ -449,6 +451,11 @@ def _load_unique_scenarios(
             "seed_type": type(evaluation_order_seed).__name__,
         }
     loaded = [(path, load_scenario(path)) for path in paths]
+    training_paths = [path for path, scenario in loaded if scenario.training_only]
+    if training_paths:
+        raise ConfigurationError(
+            f"training-only scenario cannot be benchmark truth: {training_paths[0]}"
+        )
 
     def order_key(item: tuple[Path, Scenario]) -> tuple[str, str, str]:
         path, scenario = item

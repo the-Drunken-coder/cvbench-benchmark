@@ -45,6 +45,8 @@ See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Metrics
 
 The dense real-video-v2 corpus is documented in [Real-video sources and annotation audit](docs/real-video-sources.md). It contains three native-30-FPS, full-frame clips derived from the CC BY 4.0 MEVA dataset and its upstream per-frame tracking labels. Preparation verifies pinned source and annotation hashes; no unlabeled ordinary video or unreviewed interpolation is benchmark truth.
 
+For model training only, [KITTI Tracking local import](docs/kitti-tracking-training.md) converts user-supplied official training images and labels into ignored local CVBench manifests and JSONL. KITTI data is never downloaded, committed, or admitted to public benchmark truth by this repository.
+
 ## Public scenario catalog and control plane
 
 Every scenario referenced by the current benchmark manifests is published at `/scenarios/`: 13 synthetic scenarios and 3 real-video scenarios, with exact benchmark JPEGs, full public annotations, scoring boundaries, provenance, licenses, hashes, and allowlisted first-party baseline summaries. The stable discovery endpoint is `/.well-known/cvbench-scenarios.json`; see [the catalog architecture and build contract](docs/scenario-catalog.md).

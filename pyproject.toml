@@ -26,6 +26,7 @@ dev = [
 
 [project.scripts]
 cvbench = "cvbench.cli:main"
+cvbench-import-kitti-tracking = "cvbench.kitti_tracking:main"
 cvbench-example-good = "cvbench.examples.good_tracker:main"
 cvbench-example-broken = "cvbench.examples.broken_tracker:main"
 

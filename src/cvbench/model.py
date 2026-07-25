@@ -13,6 +13,7 @@ class Frame:
     width: int
     height: int
     path: Path
+    payload_encoding: str = "jpeg"
 
 
 @dataclass
@@ -24,6 +25,7 @@ class Scenario:
     ground_truth: list[dict[str, Any]]
     faults: list[dict[str, Any]] = field(default_factory=list)
     scoreable_roi: tuple[float, float, float, float] | None = None
+    training_only: bool = False
 
 
 @dataclass(frozen=True)

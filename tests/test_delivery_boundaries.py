@@ -82,6 +82,45 @@ def test_benchmark_end_boundary_is_after_blocking_marker_send(tmp_path, monkeypa
     assert recorder.summary()["benchmark_end_sender_call_ms"] >= 20
 
 
+def test_delivery_preserves_declared_png_payload_encoding(tmp_path, monkeypatch) -> None:
+    frame_path = tmp_path / "frame.png"
+    frame_path.write_bytes(b"png-bytes")
+    scenario = Scenario(
+        "scenario",
+        "test",
+        tmp_path,
+        [Frame("sequence", 0, 0, 10, 10, frame_path, payload_encoding="png")],
+        [],
+    )
+    config = SimpleNamespace(
+        input_mode="online_replay",
+        timing_compute_contract="cvbench.timing-compute/v1",
+        delivery_policy="cvbench.delivery-lossless/v1",
+        replay_profile="native",
+        playback_rate=1.0,
+    )
+    recorder = DeliveryRecorder(config.delivery_policy, config.replay_profile, config.playback_rate)
+    observed = []
+
+    def record_send(_connection, metadata, payload=b""):
+        if metadata["event"] == "frame":
+            observed.append((metadata["payload_encoding"], payload))
+
+    monkeypatch.setattr("cvbench.runner.send_message", record_send)
+    _deliver_scenarios(
+        _Connection(),
+        [scenario],
+        config,
+        time.monotonic() + 1,
+        _Monitor(),
+        _Collector(),
+        {},
+        recorder,
+    )
+
+    assert observed == [("png", b"png-bytes")]
+
+
 @pytest.mark.parametrize(
     ("metadata", "payload"),
     [

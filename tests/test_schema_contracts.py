@@ -73,6 +73,12 @@ def test_ground_truth_bbox_requirement_matches_runtime_contract() -> None:
     validator.validate(off_screen)
 
 
+@pytest.mark.parametrize("occlusion", ["none", "partial", "full", "unknown"])
+def test_ground_truth_schema_accepts_unknown_visibility_with_ordinal_occlusion(occlusion: str) -> None:
+    validator = _validator("ground-truth-v1.schema.json")
+    validator.validate({**gt(0), "visibility_fraction": None, "occlusion": occlusion})
+
+
 def test_ground_truth_ignore_region_conditionals_are_complete() -> None:
     validator = _validator("ground-truth-v1.schema.json")
     valid = {**gt(0), "ignore": True, "ignore_region": True, "ignore_region_id": "region"}
@@ -82,6 +88,7 @@ def test_ground_truth_ignore_region_conditionals_are_complete() -> None:
         {**gt(0), "ignore": True, "ignore_region": True},
         {**gt(0), "ignore": True, "ignore_region": True, "ignore_region_id": ""},
         {**gt(0), "ignore": True, "ignore_region_id": "region"},
+        {**gt(0), "ignore": False, "ignore_class_agnostic": True},
     ):
         with pytest.raises(ValidationError):
             validator.validate(invalid)

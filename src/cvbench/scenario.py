@@ -50,6 +50,9 @@ def load_scenario(path: str | Path) -> Scenario:
     last_timestamp = -1
     for raw in raw_frames:
         try:
+            payload_encoding = str(raw.get("payload_encoding", "jpeg"))
+            if payload_encoding not in {"jpeg", "png"}:
+                raise ValueError("payload_encoding must be jpeg or png")
             frame = Frame(
                 sequence_id=data["sequence_id"],
                 frame_index=int(raw["frame_index"]),
@@ -57,6 +60,7 @@ def load_scenario(path: str | Path) -> Scenario:
                 width=int(raw["width"]),
                 height=int(raw["height"]),
                 path=(root / raw["path"]).resolve(),
+                payload_encoding=payload_encoding,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ConfigurationError(f"invalid frame in {path}: {exc}") from exc
@@ -92,4 +96,5 @@ def load_scenario(path: str | Path) -> Scenario:
         ground_truth=ground_truth,
         faults=faults,
         scoreable_roi=scoreable_roi,
+        training_only=data.get("usage") == "training_only",
     )

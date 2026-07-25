@@ -5,7 +5,7 @@ import json
 import sys
 
 from .config import load_benchmark, load_system
-from .errors import CVBenchError
+from .errors import ConfigurationError, CVBenchError
 from .runner import run_benchmark
 from .scenario import load_scenario
 from .synthetic import generate_synthetic_pack
@@ -47,7 +47,11 @@ def main(argv: list[str] | None = None) -> int:
             benchmark = load_benchmark(args.benchmark)
             system = load_system(args.system)
             for path in benchmark.scenarios:
-                load_scenario(path)
+                scenario = load_scenario(path)
+                if scenario.training_only:
+                    raise ConfigurationError(
+                        f"training-only scenario cannot be benchmark truth: {path}"
+                    )
             print(f"valid: benchmark={benchmark.id} system={system.id}")
         elif args.command == "scenarios" and args.scenario_command == "generate":
             paths = generate_synthetic_pack(args.output)

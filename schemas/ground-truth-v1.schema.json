@@ -10,11 +10,12 @@
     "source_timestamp_ns": {"type": "integer", "minimum": 0},
     "on_screen": {"type": "boolean"},
     "eligible_for_detection": {"type": "boolean"},
-    "visibility_fraction": {"type": "number", "minimum": 0, "maximum": 1},
-    "occlusion": {"enum": ["none", "partial", "full"]},
+    "visibility_fraction": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "occlusion": {"enum": ["none", "partial", "full", "unknown"]},
     "class_id": {"type": "string"},
     "ignore": {"type": "boolean", "default": false},
     "ignore_region": {"type": "boolean", "default": false},
+    "ignore_class_agnostic": {"type": "boolean", "default": false},
     "ignore_region_id": {"type": "string", "minLength": 1},
     "bbox_xyxy": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
     "entry_event": {"type": "boolean"},
@@ -40,6 +41,13 @@
     {
       "if": {"required": ["ignore_region_id"]},
       "then": {"required": ["ignore_region"], "properties": {"ignore_region": {"const": true}}}
+    },
+    {
+      "if": {
+        "required": ["ignore_class_agnostic"],
+        "properties": {"ignore_class_agnostic": {"const": true}}
+      },
+      "then": {"required": ["ignore"], "properties": {"ignore": {"const": true}}}
     }
   ],
   "additionalProperties": true

@@ -14,3 +14,4 @@ reports/real-video-v1/
 node_modules/
 .wrangler/
 .dev.vars
+.local-ingest/

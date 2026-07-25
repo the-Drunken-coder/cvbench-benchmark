@@ -95,3 +95,44 @@ def test_fault_objects_and_omitted_faults_are_preserved(tmp_path: Path) -> None:
     fault = {"type": "delay", "frame_indices": [0], "duration_ms": 1}
     assert load_scenario(_scenario_file(tmp_path / "valid", faults=[fault])).faults == [fault]
     assert load_scenario(_scenario_file(tmp_path / "omitted")).faults == []
+
+
+def test_frame_payload_encoding_defaults_to_jpeg_and_accepts_png(tmp_path: Path) -> None:
+    assert load_scenario(_scenario_file(tmp_path / "jpeg")).frames[0].payload_encoding == "jpeg"
+    assert (
+        load_scenario(
+            _scenario_file(
+                tmp_path / "png",
+                frames=[
+                    {
+                        "frame_index": 0,
+                        "source_timestamp_ns": 0,
+                        "width": 160,
+                        "height": 120,
+                        "path": "frames/0000.jpg",
+                        "payload_encoding": "png",
+                    }
+                ],
+            )
+        ).frames[0].payload_encoding
+        == "png"
+    )
+
+
+def test_frame_payload_encoding_rejects_unknown_values(tmp_path: Path) -> None:
+    with pytest.raises(ConfigurationError, match="payload_encoding must be jpeg or png"):
+        load_scenario(
+            _scenario_file(
+                tmp_path,
+                frames=[
+                    {
+                        "frame_index": 0,
+                        "source_timestamp_ns": 0,
+                        "width": 160,
+                        "height": 120,
+                        "path": "frames/0000.jpg",
+                        "payload_encoding": "webp",
+                    }
+                ],
+            )
+        )

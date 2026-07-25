@@ -195,7 +195,11 @@ def mark_ignored_outputs(
         prediction_box = output["geometry"]["value"]
         overlaps = []
         for row in candidates:
-            if not thresholds.class_agnostic and row.get("class_id") != output.get("class_id"):
+            if (
+                not thresholds.class_agnostic
+                and not row.get("ignore_class_agnostic", False)
+                and row.get("class_id") != output.get("class_id")
+            ):
                 continue
             overlap = (
                 intersection_over_prediction_area(prediction_box, row["bbox_xyxy"])
