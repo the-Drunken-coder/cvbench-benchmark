@@ -44,7 +44,11 @@ function publicRecord() {
       image: `ghcr.io/example/tracker@sha256:${"a".repeat(64)}`,
       argv: ["python", "-m", "cvbench.examples.good_tracker"],
     },
-    benchmark: { id: "public-whole-system-tracking", version: "2.0.0" },
+    benchmark: {
+      id: "public-whole-system-tracking",
+      version: "2.0.0",
+      scenario_ids: ["rvmot-a1c9", "rvmot-b7e2", "rvmot-c4f6"],
+    },
     attempt: 2,
     result: {
       scores: {
@@ -76,6 +80,12 @@ function publicRecord() {
         severity: "high",
         statement: "The system missed a substantial portion of eligible target observations.",
       }],
+      prediction_overlay: {
+        state: "complete",
+        schema_version: "cvbench.prediction-overlay/v1",
+        scenario_url_template: `/api/v1/submissions/e27063e8-4436-46e6-bdb5-54941cfd499d/prediction-overlays/{scenario_id}`,
+        root_sha256: "a".repeat(64),
+      },
     },
     error: null,
     created_at: "2026-07-25T23:20:36.000Z",
@@ -115,6 +125,36 @@ test("quick submit safely retries and opens the formatted playback result", asyn
   });
   await page.route("**/api/v1/submissions**", async (route) => {
     const request = route.request();
+    if (request.url().includes("/prediction-overlays/")) {
+      const scenarioId = request.url().split("/").at(-1);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          schema_version: "cvbench.prediction-overlay/v1",
+          state: "complete",
+          scenario_id: scenarioId,
+          width: 896,
+          height: 504,
+          frame_count: 150,
+          frames: Array.from({ length: 150 }, (_, frame_index) => ({
+            frame_index,
+            source_timestamp_ns: Math.round(frame_index * 1_000_000_000 / 30),
+            objects: frame_index === 0 ? [{
+              track_label: "track-001",
+              class_id: "vehicle",
+              event: "track_update",
+              state: "confirmed",
+              support: "observed",
+              confidence: 0.9,
+              bbox_xyxy: [10, 20, 100, 120],
+            }] : [],
+          })),
+          summary: { prediction_count: 1 },
+        }),
+      });
+      return;
+    }
     if (request.method() === "POST") {
       postAttempts += 1;
       idempotencyKeys.push(request.headers()["idempotency-key"]);
@@ -150,19 +190,25 @@ test("quick submit safely retries and opens the formatted playback result", asyn
     assert.equal("api_key" in postedBody, false);
     assert.match(page.url(), /\/results\/\?submission=/);
 
-    await page.locator(".result-video-stage img").evaluate(
+    await page.locator('[data-testid="source-frame"]').evaluate(
       (image) => image.complete && image.naturalWidth > 0 || new Promise((resolve) => image.addEventListener("load", resolve, { once: true })),
     );
     await page.locator(".result-ground-truth-box").first().waitFor();
+    await page.locator(".result-model-box").first().waitFor();
+    assert.equal(await page.locator(".result-video-stage img").count(), 2);
     assert.equal(await page.getByText("84.3%").first().textContent(), "84.3%");
     assert.equal(await page.getByText("24.9 MiB").textContent(), "24.9 MiB");
     assert.equal(await page.locator(".raw-result").getAttribute("open"), null);
-    assert.match(await page.locator(".playback-disclosure").textContent(), /not the submitted system’s predictions/);
+    assert.match(await page.locator(".playback-disclosure").textContent(), /submitted system’s retained track projection/);
 
     const initialPosition = await page.locator(".result-video-controls output").first().textContent();
     await page.getByRole("button", { name: "Play benchmark footage" }).click();
     await page.waitForFunction((before) => document.querySelector(".result-video-controls output")?.textContent !== before, initialPosition);
     await page.getByRole("button", { name: "Pause benchmark footage" }).click();
+    assert.equal(
+      await page.locator('[data-testid="source-frame"]').getAttribute("src"),
+      await page.locator('[data-testid="model-frame"]').getAttribute("src"),
+    );
     await page.getByRole("button", { name: "Close handoff" }).click();
     await page.getByRole("heading", { name: "Close-proximity handoff" }).waitFor();
 

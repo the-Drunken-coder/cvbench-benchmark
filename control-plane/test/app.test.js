@@ -737,6 +737,74 @@ test("the configured lease accepts a callback through the full 3000-second budge
   }
 });
 
+test("prediction overlays are lease-bound, complete, sanitized, and public only after success", async () => {
+  store.predictionOverlaysRequired = true;
+  const created = await (await submit(validBody(), "prediction-overlay-0001")).json();
+  const leased = await (await lease()).json();
+  const callbackBody = { status: "succeeded", lease_token: leased.lease.token, report: scoredReport() };
+  assert.equal((await result(created.id, callbackBody)).status, 409);
+
+  for (const scenarioId of PUBLIC_BENCHMARK.scenario_ids) {
+    const payload = {
+      schema_version: "cvbench.prediction-overlay/v1",
+      state: "complete",
+      scenario_id: scenarioId,
+      width: 100,
+      height: 80,
+      frame_count: 1,
+      frames: [{
+        frame_index: 0,
+        source_timestamp_ns: 0,
+        objects: [{
+          track_label: "track-001",
+          class_id: "person",
+          event: "track_update",
+          state: "confirmed",
+          support: "observed",
+          confidence: 0.9,
+          bbox_xyxy: [1, 2, 30, 40],
+        }],
+      }],
+      summary: { prediction_count: 1 },
+    };
+    const uploaded = await request(
+      `/api/v1/internal/submissions/${created.id}/prediction-overlays/${scenarioId}`,
+      {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${RUNNER_TOKEN}`,
+          "content-type": "application/json",
+          "x-cvbench-lease-token": leased.lease.token,
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+    assert.equal(uploaded.status, 201);
+  }
+
+  assert.equal(
+    (await request(`/api/v1/submissions/${created.id}/prediction-overlays/rvmot-a1c9`)).status,
+    404,
+  );
+  const sealed = await request(
+    `/api/v1/internal/submissions/${created.id}/prediction-overlays/complete`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${RUNNER_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ lease_token: leased.lease.token }),
+    },
+  );
+  assert.equal(sealed.status, 201);
+  assert.equal((await result(created.id, callbackBody)).status, 200);
+
+  const publicSubmission = await jsonRequest(`/api/v1/submissions/${created.id}`);
+  assert.equal(publicSubmission.result.prediction_overlay.state, "complete");
+  const publicOverlay = await request(`/api/v1/submissions/${created.id}/prediction-overlays/rvmot-a1c9`);
+  assert.equal(publicOverlay.status, 200);
+  assert.match(publicOverlay.headers.get("cache-control"), /immutable/);
+  assert.equal((await publicOverlay.json()).frames[0].objects[0].track_label, "track-001");
+});
+
 function validBody() {
   return {
     image: IMAGE,

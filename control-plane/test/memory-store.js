@@ -39,6 +39,9 @@ export class MemoryStore {
       leaseExpiresAt: null,
       leaseTokenHash: null,
       resultSha256: null,
+      predictionOverlaysRequired: false,
+      predictionOverlayAttempt: null,
+      predictionOverlayRootSha256: null,
     };
     this.rows.set(row.id, stored);
     return { kind: "created", submission: clone(stored) };
@@ -100,6 +103,9 @@ export class MemoryStore {
       updatedAt: now,
       leaseExpiresAt,
       leaseTokenHash,
+      predictionOverlaysRequired: this.predictionOverlaysRequired === true,
+      predictionOverlayAttempt: null,
+      predictionOverlayRootSha256: null,
     });
     return clone(queued);
   }
@@ -120,6 +126,8 @@ export class MemoryStore {
     if (!row || row.status !== "running" || row.leaseTokenHash !== leaseTokenHash || row.leaseExpiresAt < now) {
       return null;
     }
+    const overlaySet = this.overlaySets?.get(`${id}:${row.attempt}`);
+    if (status === "succeeded" && row.predictionOverlaysRequired && !overlaySet) return null;
     Object.assign(row, {
       status,
       result: report,
@@ -129,8 +137,55 @@ export class MemoryStore {
       updatedAt: now,
       leaseTokenHash: null,
       leaseExpiresAt: null,
+      predictionOverlayAttempt: status === "succeeded" ? row.attempt : null,
+      predictionOverlayRootSha256: status === "succeeded" ? overlaySet?.rootSha256 || null : null,
     });
     return clone(row);
+  }
+
+  async stagePredictionOverlay({ id, leaseTokenHash, scenarioId, payloadJson, payloadSha256, byteCount, predictionCount, now }) {
+    const row = this.rows.get(id);
+    if (!row || row.status !== "running" || row.leaseTokenHash !== leaseTokenHash || row.leaseExpiresAt < now) {
+      return { kind: "invalid_transition" };
+    }
+    this.overlays ||= new Map();
+    const key = `${id}:${row.attempt}:${scenarioId}`;
+    const existing = this.overlays.get(key);
+    if (existing) return { kind: existing.payloadSha256 === payloadSha256 ? "replay" : "conflict" };
+    this.overlays.set(key, { id, attempt: row.attempt, scenarioId, payloadJson, payloadSha256, byteCount, predictionCount });
+    return { kind: "created" };
+  }
+
+  async stagedPredictionOverlays({ id, leaseTokenHash, now }) {
+    const row = this.rows.get(id);
+    if (!row || row.status !== "running" || row.leaseTokenHash !== leaseTokenHash || row.leaseExpiresAt < now) return null;
+    return {
+      attempt: row.attempt,
+      rows: [...(this.overlays?.values() || [])]
+        .filter((item) => item.id === id && item.attempt === row.attempt)
+        .sort((left, right) => left.scenarioId.localeCompare(right.scenarioId))
+        .map((item) => ({ scenario_id: item.scenarioId, payload_sha256: item.payloadSha256 })),
+    };
+  }
+
+  async sealPredictionOverlays({ id, attempt, leaseTokenHash, rootSha256, now }) {
+    const row = this.rows.get(id);
+    if (!row || row.attempt !== attempt || row.status !== "running" || row.leaseTokenHash !== leaseTokenHash || row.leaseExpiresAt < now) {
+      return { kind: "invalid_transition" };
+    }
+    this.overlaySets ||= new Map();
+    const key = `${id}:${attempt}`;
+    const existing = this.overlaySets.get(key);
+    if (existing) return { kind: existing.rootSha256 === rootSha256 ? "replay" : "conflict" };
+    this.overlaySets.set(key, { rootSha256 });
+    return { kind: "created" };
+  }
+
+  async getPredictionOverlay(id, scenarioId) {
+    const row = this.rows.get(id);
+    if (!row || row.status !== "succeeded" || !row.predictionOverlayRootSha256) return null;
+    const overlay = this.overlays?.get(`${id}:${row.predictionOverlayAttempt}:${scenarioId}`);
+    return overlay ? { payload: JSON.parse(overlay.payloadJson), sha256: overlay.payloadSha256 } : null;
   }
 }
 

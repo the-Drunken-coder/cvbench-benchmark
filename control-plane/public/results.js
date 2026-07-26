@@ -1,10 +1,4 @@
 const terminalStatuses = new Set(["succeeded", "failed"]);
-const resultScenarios = [
-  { id: "rvmot-a1c9", label: "Loading + occlusion" },
-  { id: "rvmot-b7e2", label: "Close handoff" },
-  { id: "rvmot-c4f6", label: "Wide parking view" },
-];
-
 let statusGeneration = 0;
 let statusPollTimer = null;
 let playbackGeneration = 0;
@@ -16,6 +10,14 @@ function element(tag, text, className) {
   if (text !== undefined) node.textContent = text;
   if (className) node.className = className;
   return node;
+}
+
+function scenarioLabel(id) {
+  return {
+    "rvmot-a1c9": "Loading + occlusion",
+    "rvmot-b7e2": "Close handoff",
+    "rvmot-c4f6": "Wide parking view",
+  }[id] || id.replaceAll("-", " ");
 }
 
 function svgElement(tag, attributes = {}) {
@@ -110,7 +112,7 @@ async function fetchJson(url) {
 }
 
 function renderGroundTruth(objects) {
-  const overlay = playback.overlay;
+  const overlay = playback.sourceOverlay;
   overlay.replaceChildren();
   overlay.setAttribute("viewBox", `0 0 ${playback.width} ${playback.height}`);
   for (const object of objects || []) {
@@ -129,6 +131,30 @@ function renderGroundTruth(objects) {
       class: "result-ground-truth-label",
     });
     label.textContent = `${object.class_id} · ${object.target_id}`;
+    overlay.append(label);
+  }
+}
+
+function renderModelPredictions(objects) {
+  const overlay = playback.modelOverlay;
+  overlay.replaceChildren();
+  overlay.setAttribute("viewBox", `0 0 ${playback.width} ${playback.height}`);
+  for (const object of objects || []) {
+    if (!Array.isArray(object.bbox_xyxy)) continue;
+    const [x1, y1, x2, y2] = object.bbox_xyxy;
+    overlay.append(svgElement("rect", {
+      x: x1,
+      y: y1,
+      width: Math.max(0, x2 - x1),
+      height: Math.max(0, y2 - y1),
+      class: "result-model-box",
+    }));
+    const label = svgElement("text", {
+      x: Math.max(4, x1),
+      y: Math.max(16, y1 - 5),
+      class: "result-model-label",
+    });
+    label.textContent = `${object.class_id} · ${object.track_label}`;
     overlay.append(label);
   }
 }
@@ -152,14 +178,27 @@ async function showPlaybackFrame(index, generation = playbackGeneration) {
   if (!playback || generation !== playbackGeneration) return;
 
   playback.index = bounded;
-  playback.image.src = frame.media.url;
-  playback.image.alt = `Exact benchmark frame ${bounded + 1} of ${playback.frames.length}`;
+  for (const [imageElement, label] of [
+    [playback.sourceImage, "ground-truth"],
+    [playback.modelImage, "model-prediction"],
+  ]) {
+    imageElement.src = frame.media.url;
+    imageElement.alt = `Exact benchmark frame ${bounded + 1} of ${playback.frames.length} with ${label} overlay`;
+  }
   playback.scrubber.value = String(bounded);
   playback.position.textContent = `${bounded + 1} / ${playback.frames.length}`;
   playback.time.textContent = `${(frame.source_timestamp_ns / 1_000_000_000).toFixed(3)} s`;
   playback.mediaState.hidden = true;
   const annotationFrame = playback.annotations.frames.find((item) => item.frame_index === frame.frame_index);
   renderGroundTruth(annotationFrame?.objects || []);
+  if (playback.modelArtifact?.state === "complete") {
+    const modelFrame = playback.modelArtifact.frames.find((item) => item.frame_index === frame.frame_index);
+    renderModelPredictions(modelFrame?.objects || []);
+    playback.modelState.hidden = Boolean(modelFrame?.objects?.length);
+    playback.modelState.textContent = "No model tracks emitted for this frame.";
+  } else {
+    renderModelPredictions([]);
+  }
 
   for (const upcoming of playback.frames.slice(bounded + 1, bounded + 4)) {
     const preload = new Image();
@@ -211,13 +250,38 @@ async function loadPlaybackScenario(id, view) {
       index: 0,
       speed: Number(view.speed.value),
       playing: false,
+      modelArtifact: null,
     };
-    view.image.width = detail.media.width;
-    view.image.height = detail.media.height;
+    for (const imageElement of [view.sourceImage, view.modelImage]) {
+      imageElement.width = detail.media.width;
+      imageElement.height = detail.media.height;
+    }
     view.scrubber.max = String(frames.frames.length - 1);
     view.title.textContent = detail.title;
     view.openScenario.href = `/scenarios/?scenario=${encodeURIComponent(id)}`;
     await showPlaybackFrame(0, generation);
+    if (view.overlayAvailability?.state !== "complete") {
+      view.modelState.hidden = false;
+      view.modelState.textContent = "Model playback unavailable — this run predates overlay retention.";
+      return;
+    }
+    try {
+      const modelArtifact = await fetchJson(
+        `/api/v1/submissions/${encodeURIComponent(view.submissionId)}/prediction-overlays/${encodeURIComponent(id)}`,
+      );
+      if (!playback || generation !== playbackGeneration) return;
+      playback.modelArtifact = modelArtifact;
+      if (modelArtifact.state === "unavailable") {
+        view.modelState.hidden = false;
+        view.modelState.textContent = "Model playback unavailable — the run exceeded the safe visualization budget.";
+      } else {
+        await showPlaybackFrame(playback.index, generation);
+      }
+    } catch {
+      if (!playback || generation !== playbackGeneration) return;
+      view.modelState.hidden = false;
+      view.modelState.textContent = "Model playback unavailable — the retained overlay could not be loaded.";
+    }
   } catch (error) {
     if (generation !== playbackGeneration) return;
     view.mediaState.textContent = error.message;
@@ -225,23 +289,24 @@ async function loadPlaybackScenario(id, view) {
   }
 }
 
-function renderPlayback() {
+function renderPlayback(body) {
   const theater = element("section", undefined, "result-theater");
   const heading = element("div", undefined, "result-theater-heading");
   const headingCopy = element("div");
   headingCopy.append(
     element("p", "Benchmark playback", "kicker"),
-    element("h3", "See the exact frames behind the score."),
+    element("h3", "Compare source truth with the model run."),
   );
   const disclosure = element(
     "p",
-    "Crisp public benchmark footage with ground-truth boxes. These overlays are not the submitted system’s predictions, which are not exposed by the public result API.",
+    "Both panes use the same exact frame and shared controls. The left shows exhaustive source tags; the right shows the submitted system’s retained track projection.",
     "playback-disclosure",
   );
   heading.append(headingCopy, disclosure);
 
   const reel = element("div", undefined, "result-reel");
-  const scenarioButtons = resultScenarios.map((scenario) => {
+  const scenarios = (body.benchmark?.scenario_ids || []).map((id) => ({ id, label: scenarioLabel(id) }));
+  const scenarioButtons = scenarios.map((scenario) => {
     const button = element("button", scenario.label);
     button.type = "button";
     button.dataset.scenario = scenario.id;
@@ -251,12 +316,33 @@ function renderPlayback() {
   });
 
   const viewer = element("div", undefined, "result-video");
-  const stage = element("div", undefined, "result-video-stage");
-  const image = document.createElement("img");
-  image.alt = "";
-  const overlay = svgElement("svg", { "aria-hidden": "true" });
+  viewer.dataset.testid = "comparison-viewer";
+  const comparison = element("div", undefined, "result-comparison");
+  const sourcePane = element("section", undefined, "result-video-pane");
+  sourcePane.dataset.testid = "source-pane";
+  sourcePane.append(element("h4", "Source · Ground truth"));
+  const sourceStage = element("div", undefined, "result-video-stage");
+  const sourceImage = document.createElement("img");
+  sourceImage.alt = "";
+  sourceImage.dataset.testid = "source-frame";
+  const sourceOverlay = svgElement("svg", { "aria-hidden": "true", "data-testid": "source-overlay" });
   const mediaState = element("p", "Loading exact benchmark frames…", "result-media-state");
-  stage.append(image, overlay, mediaState);
+  sourceStage.append(sourceImage, sourceOverlay, mediaState);
+  sourcePane.append(sourceStage, element("p", "Solid green · public ground truth", "ground-truth-legend"));
+
+  const modelPane = element("section", undefined, "result-video-pane");
+  modelPane.dataset.testid = "model-pane";
+  modelPane.append(element("h4", "Model run · Submitted tracks"));
+  const modelStage = element("div", undefined, "result-video-stage");
+  const modelImage = document.createElement("img");
+  modelImage.alt = "";
+  modelImage.dataset.testid = "model-frame";
+  const modelOverlay = svgElement("svg", { "aria-hidden": "true", "data-testid": "model-overlay" });
+  const modelState = element("p", "Loading submitted tracks…", "result-media-state");
+  modelState.dataset.testid = "model-artifact-state";
+  modelStage.append(modelImage, modelOverlay, modelState);
+  modelPane.append(modelStage, element("p", "Dashed blue · submitted model tracks", "model-legend"));
+  comparison.append(sourcePane, modelPane);
 
   const controls = element("div", undefined, "result-video-controls");
   const previous = element("button", "←");
@@ -264,6 +350,7 @@ function renderPlayback() {
   previous.setAttribute("aria-label", "Previous benchmark frame");
   const playButton = element("button", "Play");
   playButton.type = "button";
+  playButton.dataset.testid = "comparison-play";
   playButton.setAttribute("aria-label", "Play benchmark footage");
   const next = element("button", "→");
   next.type = "button";
@@ -274,11 +361,13 @@ function renderPlayback() {
   scrubber.max = "0";
   scrubber.value = "0";
   scrubber.setAttribute("aria-label", "Benchmark frame");
+  scrubber.dataset.testid = "comparison-scrubber";
   const position = element("output", "0 / 0");
   const time = element("output", "0.000 s");
   const speedLabel = element("label", "Speed ");
   const speed = document.createElement("select");
   speed.setAttribute("aria-label", "Playback speed");
+  speed.dataset.testid = "comparison-speed";
   for (const value of [0.5, 1, 2]) {
     const option = element("option", `${value}×`);
     option.value = String(value);
@@ -289,17 +378,20 @@ function renderPlayback() {
   controls.append(previous, playButton, next, scrubber, position, time, speedLabel);
 
   const footer = element("div", undefined, "result-video-footer");
-  const legend = element("p", "▣ Public exhaustive ground truth", "ground-truth-legend");
+  const legend = element("p", "Frame-locked comparison", "ground-truth-legend");
   const openScenario = element("a", "Open full frame inspector →");
   footer.append(legend, openScenario);
-  viewer.append(stage, controls, footer);
+  viewer.append(comparison, controls, footer);
   theater.append(heading, reel, viewer);
 
   const view = {
     title: headingCopy.querySelector("h3"),
     scenarioButtons,
-    image,
-    overlay,
+    sourceImage,
+    sourceOverlay,
+    modelImage,
+    modelOverlay,
+    modelState,
     mediaState,
     previous,
     playButton,
@@ -309,6 +401,8 @@ function renderPlayback() {
     time,
     speed,
     openScenario,
+    submissionId: body.id,
+    overlayAvailability: body.result?.prediction_overlay,
   };
   for (const button of scenarioButtons) {
     button.addEventListener("click", () => loadPlaybackScenario(button.dataset.scenario, view));
@@ -342,7 +436,7 @@ function renderPlayback() {
   speed.addEventListener("change", () => {
     if (playback) playback.speed = Number(speed.value);
   });
-  loadPlaybackScenario(resultScenarios[0].id, view);
+  if (scenarios.length) loadPlaybackScenario(scenarios[0].id, view);
   return theater;
 }
 
@@ -451,7 +545,7 @@ function renderSubmission(body) {
       ]),
     );
 
-    output.append(eligibility, renderPlayback(), groups, renderFindings(body.result.findings || []));
+    output.append(eligibility, renderPlayback(body), groups, renderFindings(body.result.findings || []));
   } else {
     const pending = element("section", undefined, "result-pending");
     pending.append(

@@ -28,6 +28,7 @@ from .evidence import generate_evidence_packets
 from .matching import match_records_by_support
 from .metrics import calculate_metrics
 from .model import CollectedRecord, RunArtifacts, RuntimeOutcome, Scenario
+from .prediction_overlay import write_prediction_overlays
 from .protocol import send_message
 from .reporting import write_report_files
 from .resources import ResourceMonitor, unavailable_resource_summary
@@ -788,6 +789,12 @@ def run_benchmark(benchmark_path: str | Path, system_path: str | Path, output_ro
         resources_csv.write_text("elapsed_ms,cpu_percent,memory_bytes\n")
     raw_output = run_dir / "system-output.jsonl"
     raw_output.write_text("".join(json.dumps(item.as_dict(), sort_keys=True) + "\n" for item in collected))
+    write_prediction_overlays(
+        run_dir / "prediction-overlays",
+        scenarios,
+        scored_collected,
+        sequence_timestamps,
+    )
     (run_dir / "matching-decisions.jsonl").write_text(
         "".join(
             json.dumps(

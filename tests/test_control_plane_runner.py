@@ -21,6 +21,7 @@ from scripts.run_control_plane_job import (
     PUBLIC_LEADERBOARD_POLICY,
     PUBLIC_REPLAY_PROFILE,
     PUBLIC_REPLAY_RATE,
+    PUBLIC_SCENARIO_IDS,
     PUBLIC_TIMING_COMPUTE_CONTRACT,
     SECRET_ENVIRONMENT_KEYS,
     build_success_callback,
@@ -30,6 +31,7 @@ from scripts.run_control_plane_job import (
     execute_submission,
     main,
     sanitized_environment,
+    upload_prediction_overlays,
     validate_lease,
     write_system_config,
 )
@@ -46,6 +48,28 @@ BENCHMARK = {
     "replay_rate": PUBLIC_REPLAY_RATE,
     "leaderboard_policy": PUBLIC_LEADERBOARD_POLICY,
 }
+
+
+def test_prediction_overlay_uploads_exact_suite_then_seals(tmp_path: Path) -> None:
+    overlay_dir = tmp_path / "runs" / "run-1" / "prediction-overlays"
+    overlay_dir.mkdir(parents=True)
+    for scenario_id in PUBLIC_SCENARIO_IDS:
+        (overlay_dir / f"{scenario_id}.json").write_text(json.dumps({"scenario_id": scenario_id}))
+    with patch("scripts.run_control_plane_job.api_request", return_value=(201, {})) as request:
+        upload_prediction_overlays(
+            "https://cvbench.test",
+            "runner-token",
+            "12345678-1234-4123-8123-123456789abc",
+            "b" * 64,
+            tmp_path,
+        )
+    assert request.call_count == len(PUBLIC_SCENARIO_IDS) + 1
+    assert all(call.kwargs["method"] == "PUT" for call in request.call_args_list[:-1])
+    assert all(
+        call.kwargs["headers"]["X-CVBench-Lease-Token"] == "b" * 64
+        for call in request.call_args_list[:-1]
+    )
+    assert request.call_args_list[-1].kwargs["body"] == {"lease_token": "b" * 64}
 
 
 def test_image_pattern_requires_digest_and_rejects_shell_like_input() -> None:
@@ -242,6 +266,7 @@ def test_transient_success_callback_failure_never_emits_failed_callback(monkeypa
             side_effect=[(200, lease), RuntimeError("transient callback failure")],
         ) as request,
         patch("scripts.run_control_plane_job.execute_submission", return_value={"outcome": {"status": "completed"}}),
+        patch("scripts.run_control_plane_job.upload_prediction_overlays"),
     ):
         assert main() == 1
 
@@ -296,6 +321,7 @@ def test_worst_case_stderr_report_fits_callback_budget_and_records_success(
     with (
         patch("scripts.run_control_plane_job.api_request", side_effect=control_plane_request),
         patch("scripts.run_control_plane_job.execute_submission", return_value=report),
+        patch("scripts.run_control_plane_job.upload_prediction_overlays"),
     ):
         assert main() == 0
 

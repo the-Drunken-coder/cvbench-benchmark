@@ -137,7 +137,9 @@ export class D1Store {
       if (!queued) return null;
       const changed = await this.db
         .prepare(`UPDATE submissions SET status = 'running', lease_token_sha256 = ?,
-          lease_expires_at = ?, attempt = attempt + 1, started_at = COALESCE(started_at, ?), updated_at = ?
+          lease_expires_at = ?, attempt = attempt + 1, prediction_overlays_required = 1,
+          prediction_overlay_attempt = NULL, prediction_overlay_root_sha256 = NULL,
+          started_at = COALESCE(started_at, ?), updated_at = ?
           WHERE id = ? AND status = 'queued'`)
         .bind(leaseTokenHash, leaseExpiresAt, now, now, queued.id)
         .run();
@@ -156,12 +158,107 @@ export class D1Store {
     return Number(changed.meta?.changes || 0);
   }
 
+  async stagePredictionOverlay({ id, leaseTokenHash, scenarioId, payloadJson, payloadSha256, byteCount, predictionCount, now }) {
+    const submission = await this.db
+      .prepare(`SELECT attempt FROM submissions
+        WHERE id = ? AND status = 'running' AND lease_token_sha256 = ? AND lease_expires_at >= ?`)
+      .bind(id, leaseTokenHash, now)
+      .first();
+    if (!submission) return { kind: "invalid_transition" };
+    const existing = await this.db
+      .prepare(`SELECT payload_sha256 FROM prediction_overlays
+        WHERE submission_id = ? AND attempt = ? AND scenario_id = ?`)
+      .bind(id, submission.attempt, scenarioId)
+      .first();
+    if (existing) return { kind: existing.payload_sha256 === payloadSha256 ? "replay" : "conflict" };
+    await this.db
+      .prepare(`INSERT INTO prediction_overlays (
+        submission_id, attempt, scenario_id, payload_json, payload_sha256,
+        byte_count, prediction_count, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, submission.attempt, scenarioId, payloadJson, payloadSha256, byteCount, predictionCount, now)
+      .run();
+    return { kind: "created" };
+  }
+
+  async stagedPredictionOverlays({ id, leaseTokenHash, now }) {
+    const submission = await this.db
+      .prepare(`SELECT attempt FROM submissions
+        WHERE id = ? AND status = 'running' AND lease_token_sha256 = ? AND lease_expires_at >= ?`)
+      .bind(id, leaseTokenHash, now)
+      .first();
+    if (!submission) return null;
+    const result = await this.db
+      .prepare(`SELECT scenario_id, payload_sha256 FROM prediction_overlays
+        WHERE submission_id = ? AND attempt = ? ORDER BY scenario_id`)
+      .bind(id, submission.attempt)
+      .all();
+    return { attempt: submission.attempt, rows: result.results || [] };
+  }
+
+  async sealPredictionOverlays({ id, attempt, leaseTokenHash, rootSha256, now }) {
+    const existing = await this.db
+      .prepare("SELECT root_sha256 FROM prediction_overlay_sets WHERE submission_id = ? AND attempt = ?")
+      .bind(id, attempt)
+      .first();
+    if (existing) return { kind: existing.root_sha256 === rootSha256 ? "replay" : "conflict" };
+    const changed = await this.db
+      .prepare(`INSERT INTO prediction_overlay_sets (submission_id, attempt, root_sha256, sealed_at)
+        SELECT ?, ?, ?, ? WHERE EXISTS (
+          SELECT 1 FROM submissions
+          WHERE id = ? AND attempt = ? AND status = 'running'
+            AND lease_token_sha256 = ? AND lease_expires_at >= ?
+        )`)
+      .bind(id, attempt, rootSha256, now, id, attempt, leaseTokenHash, now)
+      .run();
+    return { kind: Number(changed.meta?.changes || 0) === 1 ? "created" : "invalid_transition" };
+  }
+
+  async getPredictionOverlay(id, scenarioId) {
+    const row = await this.db
+      .prepare(`SELECT o.payload_json, o.payload_sha256
+        FROM submissions s
+        JOIN prediction_overlay_sets overlay_set
+          ON overlay_set.submission_id = s.id
+          AND overlay_set.attempt = s.prediction_overlay_attempt
+          AND overlay_set.root_sha256 = s.prediction_overlay_root_sha256
+        JOIN prediction_overlays o
+          ON o.submission_id = s.id AND o.attempt = s.prediction_overlay_attempt
+        WHERE s.id = ? AND s.status = 'succeeded'
+          AND s.prediction_overlay_root_sha256 IS NOT NULL AND o.scenario_id = ?`)
+      .bind(id, scenarioId)
+      .first();
+    return row ? { payload: JSON.parse(row.payload_json), sha256: row.payload_sha256 } : null;
+  }
+
   async completeJob({ id, leaseTokenHash, status, report, resultSha256, error, now }) {
     const changed = await this.db
       .prepare(`UPDATE submissions SET status = ?, result_json = ?, result_sha256 = ?, error = ?, completed_at = ?,
-        updated_at = ?, lease_token_sha256 = NULL, lease_expires_at = NULL
-        WHERE id = ? AND status = 'running' AND lease_token_sha256 = ? AND lease_expires_at >= ?`)
-      .bind(status, report === null ? null : JSON.stringify(report), resultSha256, error, now, now, id, leaseTokenHash, now)
+        updated_at = ?, prediction_overlay_attempt = CASE WHEN ? = 'succeeded' THEN attempt ELSE NULL END,
+        prediction_overlay_root_sha256 = CASE WHEN ? = 'succeeded' THEN (
+          SELECT root_sha256 FROM prediction_overlay_sets
+          WHERE submission_id = submissions.id AND attempt = submissions.attempt
+        ) ELSE NULL END,
+        lease_token_sha256 = NULL, lease_expires_at = NULL
+        WHERE id = ? AND status = 'running' AND lease_token_sha256 = ? AND lease_expires_at >= ?
+          AND (? != 'succeeded' OR prediction_overlays_required = 0 OR EXISTS (
+            SELECT 1 FROM prediction_overlay_sets
+            WHERE submission_id = submissions.id AND attempt = submissions.attempt
+          ))`)
+      .bind(
+        status,
+        report === null ? null : JSON.stringify(report),
+        resultSha256,
+        error,
+        now,
+        now,
+        status,
+        status,
+        id,
+        leaseTokenHash,
+        now,
+        status,
+      )
       .run();
     return Number(changed.meta?.changes || 0) === 1 ? this.getSubmission(id) : null;
   }
@@ -186,5 +283,8 @@ function deserialize(row) {
     startedAt: row.started_at,
     completedAt: row.completed_at,
     leaseExpiresAt: row.lease_expires_at,
+    predictionOverlaysRequired: row.prediction_overlays_required === 1,
+    predictionOverlayAttempt: row.prediction_overlay_attempt ?? null,
+    predictionOverlayRootSha256: row.prediction_overlay_root_sha256 || null,
   };
 }
