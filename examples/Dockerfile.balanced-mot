@@ -10,7 +10,8 @@ COPY src /app/src
 COPY schemas /app/schemas
 RUN pip install --no-cache-dir "opencv-python-headless==4.13.0.92" .
 COPY --from=weights /yolox_tiny.onnx /app/models/yolox_tiny.onnx
-RUN chmod 0444 /app/models/yolox_tiny.onnx \
+RUN chmod 0555 /app/models \
+    && chmod 0444 /app/models/yolox_tiny.onnx \
     && groupadd --system cvbench \
     && useradd --system --gid cvbench --home-dir /nonexistent cvbench
 USER cvbench
