@@ -43,6 +43,9 @@ The runner mounts only a temporary socket directory, disables container networki
 
 See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Metrics](docs/metrics.md), [Development](docs/development.md), the [Version 1 capability matrix](docs/capability-matrix.md), and the [verbatim implementation specification](PROJECT_SPEC_VERBATIM.md).
 
+Runnable learned reference systems, model notices, and build commands live in
+the [example model catalog](examples/models/README.md).
+
 The dense real-video-v2 corpus is documented in [Real-video sources and annotation audit](docs/real-video-sources.md). It contains three native-30-FPS, full-frame clips derived from the CC BY 4.0 MEVA dataset and its upstream per-frame tracking labels. Preparation verifies pinned source and annotation hashes; no unlabeled ordinary video or unreviewed interpolation is benchmark truth.
 
 ## Public scenario catalog and control plane
