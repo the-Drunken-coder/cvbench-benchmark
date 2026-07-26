@@ -79,6 +79,8 @@ try {
   assert(!missingFrame.headers.get("cache-control")?.includes("immutable"), "unknown frame must not be immutable");
   const navigation = await request(`/scenarios/?scenario=${catalog.scenarios[0].id}`);
   assert(navigation.status === 200 && navigation.headers.get("content-type")?.includes("text/html"), "scenario navigation must remain available");
+  const resultNavigation = await request("/results/?submission=00000000-0000-4000-8000-000000000000");
+  assert(resultNavigation.status === 200 && resultNavigation.headers.get("content-type")?.includes("text/html"), "dedicated result navigation must remain available");
   const unknownPage = await request("/not-a-real-page");
   assert(unknownPage.status === 404, "unknown navigation must return the 404 page");
   process.stdout.write("Worker preview routes preserve navigation and honest catalog/media failures\n");

@@ -141,14 +141,14 @@ test("quick submit safely retries and opens the formatted playback result", asyn
     await page.getByRole("button", { name: "Queue system" }).click();
     await assert.doesNotReject(page.getByText("Temporary queue interruption.").waitFor());
     await page.getByRole("button", { name: "Queue system" }).click();
-    await assert.doesNotReject(page.getByText(/Opening its live result studio/).waitFor());
+    await page.waitForURL(/\/results\/\?submission=e27063e8-4436-46e6-bdb5-54941cfd499d$/);
 
     assert.equal(idempotencyKeys.length, 2);
     assert.equal(idempotencyKeys[0], idempotencyKeys[1], "retry must reuse the same idempotency key");
     assert.match(idempotencyKeys[0], /^web-[0-9a-f-]{36}$/);
     assert.deepEqual(postedBody.argv, ["python", "-m", "cvbench.examples.good_tracker"]);
     assert.equal("api_key" in postedBody, false);
-    assert.equal(await page.locator("[name=api_key]").inputValue(), "");
+    assert.match(page.url(), /\/results\/\?submission=/);
 
     await page.locator(".result-video-stage img").evaluate(
       (image) => image.complete && image.naturalWidth > 0 || new Promise((resolve) => image.addEventListener("load", resolve, { once: true })),
@@ -165,6 +165,13 @@ test("quick submit safely retries and opens the formatted playback result", asyn
     await page.getByRole("button", { name: "Pause benchmark footage" }).click();
     await page.getByRole("button", { name: "Close handoff" }).click();
     await page.getByRole("heading", { name: "Close-proximity handoff" }).waitFor();
+
+    await page.goto(`http://127.0.0.1:${server.address().port}/#results?submission=${publicRecord().id}`);
+    await page.waitForURL(new RegExp(`/results/\\?submission=${publicRecord().id}$`));
+    await page.getByRole("heading", { name: "CVBench Synthetic Color Tracker" }).waitFor();
+    await page.getByLabel("Submission UUID").fill(publicRecord().id);
+    await page.getByRole("button", { name: "Open result" }).click();
+    await page.getByRole("heading", { name: "CVBench Synthetic Color Tracker" }).waitFor();
 
     assert.deepEqual(
       consoleErrors.filter((message) => !/status of 503/.test(message)),

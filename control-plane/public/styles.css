@@ -114,6 +114,8 @@ code, pre { font-family: var(--mono); }
 .callout { margin-top: 1.2rem; border-left: 5px solid var(--ink); padding: 1rem 1.2rem; background: rgba(255,255,255,.35); }
 
 .results { background: var(--paper); }
+.result-lookup { max-width: 920px; margin: auto; padding: clamp(1.2rem, 3vw, 2rem); border: 1px solid var(--ink); background: rgba(255,255,255,.48); box-shadow: 9px 9px 0 var(--ink); }
+.result-lookup .status-form { margin: 0; }
 .status-form { max-width: 1120px; margin: 0 auto; }
 .status-form label { display: block; margin-bottom: .6rem; font: 700 .7rem var(--mono); text-transform: uppercase; letter-spacing: .1em; }
 .status-form > div { display: flex; }
@@ -191,6 +193,15 @@ code, pre { font-family: var(--mono); }
 .result-pending h3 { margin: .5rem auto; max-width: 720px; font-size: clamp(1.6rem, 4vw, 3rem); }
 .raw-result summary { min-height: 50px; display: flex; align-items: center; padding: .8rem clamp(1.2rem, 3vw, 2rem); cursor: pointer; background: #e4e7d7; font: 750 .74rem var(--mono); }
 .raw-result pre { padding: clamp(1rem, 3vw, 2rem); border-top: 1px solid var(--line); }
+
+.result-page { min-height: 100vh; }
+.result-page main { min-height: calc(100vh - 262px); }
+.result-page-hero { padding: clamp(4rem, 9vw, 7rem) clamp(1rem, 7vw, 8rem); border-bottom: 1px solid var(--ink); background: radial-gradient(circle at 82% 28%, rgba(216,255,50,.7), transparent 17rem), #e7eadc; }
+.result-page-hero h1 { margin: 1.4rem 0 1rem; font-size: clamp(3.8rem, 10vw, 9rem); line-height: .82; }
+.result-page-hero > p:not(.eyebrow) { max-width: 720px; color: var(--muted); font-size: clamp(1rem, 2vw, 1.2rem); }
+.result-page-hero .status-form { max-width: 920px; margin: 2.5rem 0 0; }
+.result-page-shell { padding: clamp(1rem, 4vw, 4rem) clamp(1rem, 5vw, 5rem) clamp(4rem, 8vw, 8rem); }
+.result-page-shell .status-output { max-width: 1380px; margin: 0 auto; min-height: 180px; }
 
 .security { background: #e9e7dd; }
 .security-list { border-top: 1px solid var(--ink); }
