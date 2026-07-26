@@ -109,3 +109,23 @@ def test_optical_flow_propagates_track_from_current_pixels() -> None:
     assert detections[0].class_id == "person"
     assert detections[0].box[0] > 21.0
     assert detections[0].box[1] > 20.5
+
+
+def test_static_optical_track_is_not_reacquired_and_expires() -> None:
+    image = np.zeros((80, 100), dtype=np.uint8)
+    tracker = OnlineTracker(PROFILES["advanced"])
+    tracker.update([Detection((20.0, 20.0, 40.0, 40.0), "person", 0.9)], 100, 80)
+    tracker.update([Detection((20.0, 20.0, 40.0, 40.0), "person", 0.9)], 100, 80)
+
+    for _ in range(PROFILES["advanced"].coast_frames):
+        detections = YoloXDetector._optical_detections(
+            image,
+            image,
+            list(tracker.tracks.values()),
+            100,
+            80,
+        )
+        assert detections == []
+        assert tracker.update(detections, 100, 80)[0][2:] == ("coasting", "predicted")
+
+    assert tracker.update([], 100, 80)[0][0] == "track_ended"

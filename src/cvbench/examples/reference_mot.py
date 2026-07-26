@@ -226,6 +226,8 @@ class YoloXDetector:
             if region.size == 0:
                 continue
             dx, dy = np.median(region.reshape(-1, 2), axis=0)
+            if math.hypot(float(dx), float(dy)) < 0.05:
+                continue
             box = _clamp(
                 (
                     track.box[0] + float(dx),

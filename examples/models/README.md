@@ -10,7 +10,7 @@ adapter.
 | [CVBench Balanced MOT](balanced-mot/README.md) | YOLOX-Tiny, COCO | Observation-centric IoU and motion | Better continuity and identity quality |
 | [CVBench Advanced MOT](advanced-mot/README.md) | YOLOX-L, COCO | Optical-flow propagation and two-pass observation-centric association | Maximum quality inside the public runner envelope |
 
-Both systems map COCO `person`, `car`, `motorcycle`, `bus`, `truck`, and `dog`
+All three systems map COCO `person`, `car`, `motorcycle`, `bus`, `truck`, and `dog`
 outputs into the public CVBench ontology. A deterministic pixel-only fallback
 handles the small green `synthetic_target` class. Unsupported COCO classes are
 discarded.
