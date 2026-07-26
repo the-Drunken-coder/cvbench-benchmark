@@ -306,6 +306,9 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   const javascript = await Promise.all(["app.js", "operator.js", "scenario-app.js"].map((name) => readFile(path.join(CONTROL_PLANE, "public", name), "utf8")));
   for (const source of javascript) assert.doesNotMatch(source, /\.innerHTML\s*=/i);
   assert.match(javascript[0], /scores\.replay_profile != null && scores\.replay_rate != null/);
+  assert.match(javascript[0], /crypto\.randomUUID\(\)/);
+  assert.match(javascript[0], /These overlays are not the submitted system’s predictions/);
+  assert.doesNotMatch(javascript[0], /(?:local|session)Storage/);
   const headers = await readFile(path.join(CONTROL_PLANE, "public/_headers"), "utf8");
   assert.match(headers, /object-src 'none'/);
   assert.match(headers, /media-src 'self'/);
@@ -341,4 +344,8 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   const home = await readFile(path.join(CONTROL_PLANE, "public/index.html"), "utf8");
   assert.match(home, /Benchmark the whole<br>vision system\./);
   assert.match(home, /Submit a system image\./);
+  assert.match(home, /id="quick-submit-form"/);
+  assert.match(home, /name="api_key" type="password"/);
+  assert.match(home, /Paste the immutable image\. We handle the request\./);
+  assert.match(home, /open its public result studio/);
 });
