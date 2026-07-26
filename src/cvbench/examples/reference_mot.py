@@ -217,6 +217,7 @@ class YoloXDetector:
             1.1,
             0,
         )
+        difference = cv2.absdiff(previous_gray, gray)
         detections: list[Detection] = []
         for track in tracks:
             if track.ended:
@@ -225,9 +226,10 @@ class YoloXDetector:
             region = flow[max(0, y1) : min(height, y2), max(0, x1) : min(width, x2)]
             if region.size == 0:
                 continue
-            dx, dy = np.median(region.reshape(-1, 2), axis=0)
-            if math.hypot(float(dx), float(dy)) < 0.05:
+            changed = difference[max(0, y1) : min(height, y2), max(0, x1) : min(width, x2)] > 3
+            if np.count_nonzero(changed) < max(4, round(changed.size * 0.005)):
                 continue
+            dx, dy = np.median(region[changed], axis=0)
             box = _clamp(
                 (
                     track.box[0] + float(dx),
