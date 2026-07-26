@@ -21,6 +21,8 @@ const STATIC_FILES = [
   "index.html",
   "operator.html",
   "operator.js",
+  "results.js",
+  "results/index.html",
   "scenario-app.js",
   "scenario-loader.js",
   "scenarios/index.html",

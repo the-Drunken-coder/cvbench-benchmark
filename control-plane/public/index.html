@@ -17,7 +17,7 @@
         <a href="/scenarios/">Scenarios</a>
         <a href="#contract">Contract</a>
         <a href="#submit">Submit</a>
-        <a href="#results">Results</a>
+        <a href="/results/">Results</a>
         <a href="/operator.html">Operator</a>
         <a href="/api/v1/openapi.json">OpenAPI</a>
       </nav>
@@ -93,8 +93,62 @@ CPU / memory           # 4 / 2048 MB</code></pre>
       <section class="section code-section" id="submit">
         <div class="section-intro">
           <span class="section-number">03</span>
-          <div><p class="kicker">Submit once, retry safely</p><h2>One API for humans and agents.</h2></div>
-          <p>A submission key creates jobs. Reads are public. Every create request needs a stable idempotency key, so retries cannot accidentally enqueue duplicates.</p>
+          <div><p class="kicker">Submit once, retry safely</p><h2>Queue a published image in one minute.</h2></div>
+          <p>Already have a public <code>linux/amd64</code> image digest? Queue it here. Your submission key stays in this page, is sent only with this request, and is never placed in a URL or browser storage.</p>
+        </div>
+        <div class="quick-submit">
+          <div class="quick-submit-heading">
+            <div>
+              <p class="kicker">Quick submit</p>
+              <h3>Paste the immutable image. We handle the request.</h3>
+            </div>
+            <ol class="submit-prep" aria-label="Submission preparation">
+              <li><span>1</span> Build</li>
+              <li><span>2</span> Publish publicly</li>
+              <li><span>3</span> Paste digest</li>
+            </ol>
+          </div>
+          <form id="quick-submit-form" class="quick-submit-form" autocomplete="off">
+            <label class="field field-wide">Public image digest
+              <input name="image" type="text" spellcheck="false" required placeholder="ghcr.io/org/system@sha256:…">
+              <small>Tags are rejected. Paste a lowercase, digest-pinned OCI image.</small>
+            </label>
+            <label class="field">System name
+              <input name="name" type="text" required maxlength="100" placeholder="Acme Temporal Tracker">
+            </label>
+            <label class="field">System version
+              <input name="model_version" type="text" required maxlength="100" placeholder="7.0">
+            </label>
+            <fieldset class="argv-field field-wide">
+              <legend>Command arguments</legend>
+              <p>One exact argument per field—no shell quoting required.</p>
+              <div id="argv-list" class="argv-list">
+                <div class="argv-row"><input aria-label="Command argument 1" type="text" value="python" required><button type="button" class="remove-argv" aria-label="Remove command argument" disabled>×</button></div>
+                <div class="argv-row"><input aria-label="Command argument 2" type="text" value="-m" required><button type="button" class="remove-argv" aria-label="Remove command argument">×</button></div>
+                <div class="argv-row"><input aria-label="Command argument 3" type="text" placeholder="tracker" required><button type="button" class="remove-argv" aria-label="Remove command argument">×</button></div>
+              </div>
+              <button id="add-argv" type="button" class="text-button">+ Add argument</button>
+            </fieldset>
+            <label class="field field-wide">Submission API key
+              <input name="api_key" type="password" required autocomplete="new-password" placeholder="Paste key for this request">
+              <small>Held only in memory and cleared after the queue accepts the request.</small>
+            </label>
+            <details class="request-details field-wide">
+              <summary>Request safety details</summary>
+              <label>Stable idempotency key
+                <input id="quick-idempotency-key" name="idempotency_key" type="text" readonly>
+              </label>
+              <p>The same key is retained across a retry so a network interruption cannot create a duplicate.</p>
+            </details>
+            <div class="quick-submit-actions field-wide">
+              <button class="button primary" type="submit">Queue system <span>→</span></button>
+              <p id="quick-submit-status" role="status">Nothing is uploaded by this form; the runner pulls the published digest.</p>
+            </div>
+          </form>
+        </div>
+        <div class="api-examples-heading">
+          <p class="kicker">API and automation</p>
+          <p>Prefer a script or agent? Use the exact same idempotent endpoint.</p>
         </div>
         <div class="tab-bar" role="tablist" aria-label="Submission examples">
           <button class="tab active" role="tab" aria-selected="true" data-tab="curl">curl</button>
@@ -148,14 +202,16 @@ print(response.json()["id"])</code></pre>
       <section class="section results" id="results">
         <div class="section-intro">
           <span class="section-number">04</span>
-          <div><p class="kicker">Public status and results</p><h2>Follow a run.</h2></div>
-          <p>Queue state, execution attempts, scored report JSON, and failure reasons are public. Submitter contact and internal lease data are not.</p>
+          <div><p class="kicker">Dedicated result studio</p><h2>Give every run its own page.</h2></div>
+          <p>The homepage stays focused. Open a submission on a dedicated, shareable page with benchmark playback, readable metrics, findings, and exact JSON.</p>
         </div>
-        <form id="status-form" class="status-form">
-          <label for="submission-id">Submission UUID</label>
-          <div><input id="submission-id" name="id" type="text" autocomplete="off" placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx" required><button class="button primary" type="submit">Check status</button></div>
-        </form>
-        <div id="status-output" class="status-output" aria-live="polite"><p>Enter a submission ID to load its public record.</p></div>
+        <div class="result-lookup">
+          <p class="kicker">Open a public result</p>
+          <form class="status-form" action="/results/" method="get">
+            <label for="submission-id">Submission UUID</label>
+            <div><input id="submission-id" name="submission" type="text" autocomplete="off" placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx" required><button class="button primary" type="submit">Open result</button></div>
+          </form>
+        </div>
       </section>
 
       <section class="section security">
@@ -176,7 +232,7 @@ print(response.json()["id"])</code></pre>
     <footer>
       <a class="brand" href="#top"><span class="brand-mark">CV</span>Bench</a>
       <p>Open evidence for complete computer-vision systems.</p>
-      <div><a href="/scenarios/">Scenarios</a><a href="https://github.com/the-Drunken-coder/cvbench-system-runner">GitHub</a><a href="/api/v1/contract">Contract</a><a href="/api/v1/openapi.json">API</a></div>
+      <div><a href="/results/">Results</a><a href="/scenarios/">Scenarios</a><a href="https://github.com/the-Drunken-coder/cvbench-system-runner">GitHub</a><a href="/api/v1/openapi.json">API</a></div>
     </footer>
   </body>
 </html>

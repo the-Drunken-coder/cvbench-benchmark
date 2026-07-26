@@ -303,9 +303,14 @@ test("unknown and private-looking source fields fail preflight before output rep
 });
 
 test("public surfaces use safe DOM rendering, strict CSP, and corrected system terminology", async () => {
-  const javascript = await Promise.all(["app.js", "operator.js", "scenario-app.js"].map((name) => readFile(path.join(CONTROL_PLANE, "public", name), "utf8")));
+  const javascript = await Promise.all(["app.js", "results.js", "operator.js", "scenario-app.js"].map((name) => readFile(path.join(CONTROL_PLANE, "public", name), "utf8")));
   for (const source of javascript) assert.doesNotMatch(source, /\.innerHTML\s*=/i);
-  assert.match(javascript[0], /scores\.replay_profile != null && scores\.replay_rate != null/);
+  assert.match(javascript[0], /crypto\.randomUUID\(\)/);
+  assert.match(javascript[0], /\/results\/\?submission=/);
+  assert.match(javascript[1], /scores\.replay_profile != null && scores\.replay_rate != null/);
+  assert.match(javascript[1], /These overlays are not the submitted system’s predictions/);
+  assert.doesNotMatch(javascript[0], /(?:local|session)Storage/);
+  assert.doesNotMatch(javascript[1], /(?:local|session)Storage/);
   const headers = await readFile(path.join(CONTROL_PLANE, "public/_headers"), "utf8");
   assert.match(headers, /object-src 'none'/);
   assert.match(headers, /media-src 'self'/);
@@ -320,7 +325,9 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
     "control-plane/public/index.html",
     "control-plane/public/operator.html",
     "control-plane/public/scenarios/index.html",
+    "control-plane/public/results/index.html",
     "control-plane/public/app.js",
+    "control-plane/public/results.js",
     "control-plane/public/operator.js",
     "control-plane/public/scenario-app.js",
     "control-plane/src/app.js",
@@ -341,4 +348,15 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   const home = await readFile(path.join(CONTROL_PLANE, "public/index.html"), "utf8");
   assert.match(home, /Benchmark the whole<br>vision system\./);
   assert.match(home, /Submit a system image\./);
+  assert.match(home, /id="quick-submit-form"/);
+  assert.match(home, /name="api_key" type="password"/);
+  assert.match(home, /Paste the immutable image\. We handle the request\./);
+  assert.match(home, /action="\/results\/"/);
+  assert.doesNotMatch(home, /src="\/results\.js"/);
+  assert.doesNotMatch(home, /id="status-output"/);
+  const results = await readFile(path.join(CONTROL_PLANE, "public/results/index.html"), "utf8");
+  assert.match(results, /Public result studio/);
+  assert.match(results, /id="status-output"/);
+  assert.match(results, /src="\/results\.js"/);
+  assert.doesNotMatch(results, /src="\/app\.js"/);
 });

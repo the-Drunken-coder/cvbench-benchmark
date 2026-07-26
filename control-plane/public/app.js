@@ -1,5 +1,13 @@
 const tabs = document.querySelectorAll("[data-tab]");
 const panels = document.querySelectorAll("[data-panel]");
+const immutableImagePattern = /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?\/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/;
+
+function element(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
 
 for (const tab of tabs) {
   tab.addEventListener("click", () => {
@@ -22,60 +30,101 @@ document.querySelector(".copy")?.addEventListener("click", async (event) => {
   setTimeout(() => { event.currentTarget.textContent = "Copy"; }, 1200);
 });
 
-document.querySelector("#status-form")?.addEventListener("submit", async (event) => {
+function refreshArgvRows() {
+  const rows = [...document.querySelectorAll(".argv-row")];
+  rows.forEach((row, index) => {
+    row.querySelector("input").setAttribute("aria-label", `Command argument ${index + 1}`);
+    row.querySelector(".remove-argv").disabled = rows.length === 1;
+  });
+}
+
+function addArgvRow(value = "") {
+  const row = element("div", undefined, "argv-row");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.required = true;
+  input.value = value;
+  const remove = element("button", "×", "remove-argv");
+  remove.type = "button";
+  remove.setAttribute("aria-label", "Remove command argument");
+  row.append(input, remove);
+  document.querySelector("#argv-list").append(row);
+  refreshArgvRows();
+  input.focus();
+}
+
+document.querySelector("#add-argv")?.addEventListener("click", () => addArgvRow());
+document.querySelector("#argv-list")?.addEventListener("click", (event) => {
+  const remove = event.target.closest(".remove-argv");
+  if (!remove || remove.disabled) return;
+  remove.closest(".argv-row").remove();
+  refreshArgvRows();
+});
+
+function resetIdempotencyKey() {
+  document.querySelector("#quick-idempotency-key").value = `web-${crypto.randomUUID()}`;
+}
+
+resetIdempotencyKey();
+refreshArgvRows();
+
+document.querySelector("#quick-submit-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const id = new FormData(event.currentTarget).get("id").trim();
-  const output = document.querySelector("#status-output");
-  output.replaceChildren(document.createElement("p"));
-  output.firstChild.textContent = "Loading public record…";
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const image = data.get("image").trim();
+  const apiKey = data.get("api_key");
+  const argv = [...form.querySelectorAll(".argv-row input")].map((input) => input.value.trim());
+  const status = document.querySelector("#quick-submit-status");
+  const submit = form.querySelector("button[type=submit]");
+
+  if (!immutableImagePattern.test(image)) {
+    status.textContent = "Use a lowercase registry/repository@sha256 digest. Mutable tags cannot be queued.";
+    status.className = "error";
+    form.querySelector("[name=image]").focus();
+    return;
+  }
+  if (argv.some((argument) => !argument)) {
+    status.textContent = "Every command argument must contain a value.";
+    status.className = "error";
+    return;
+  }
+
+  status.textContent = "Queueing the immutable image…";
+  status.className = "";
+  submit.disabled = true;
   try {
-    const response = await fetch(`/api/v1/submissions/${encodeURIComponent(id)}`);
+    const response = await fetch("/api/v1/submissions", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+        "idempotency-key": data.get("idempotency_key"),
+      },
+      body: JSON.stringify({
+        image,
+        argv,
+        name: data.get("name").trim(),
+        model_version: data.get("model_version").trim(),
+      }),
+    });
     const body = await response.json();
-    if (!response.ok) throw new Error(body.error?.message || "Could not load submission.");
-    const heading = document.createElement("p");
-    const pill = document.createElement("span");
-    pill.className = "status-pill";
-    pill.textContent = body.status;
-    heading.append(pill, `  ${body.model.name} · system version ${body.model.version}`);
-    const pre = document.createElement("pre");
-    pre.textContent = JSON.stringify(body, null, 2);
-    const axes = document.createElement("dl");
-    axes.className = "result-axes";
-    const scores = body.result?.scores;
-    if (scores) {
-      for (const [label, value] of [
-        ["Leaderboard class", scores.leaderboard_class],
-        ["Eligible", scores.leaderboard_eligible],
-        ["Accounting complete", scores.accounting_complete],
-        ["Acquisition", scores.acquisition_rate],
-        ["Observed coverage", scores.observed_coverage],
-        ["CPU seconds", scores.cpu_time_seconds],
-        ["CPU s/source s", scores.cpu_seconds_per_native_source_second],
-        ["Real-time factor", scores.real_time_factor],
-        ["Delivery latency p95 ms", scores.processing_latency_p95_ms],
-        ["Native-source offset p95 ms", scores.native_source_offset_p95_ms],
-        ["Teardown seconds", scores.teardown_seconds],
-        ["Peak RAM bytes", scores.peak_ram_bytes],
-        ["Replay", scores.replay_profile != null && scores.replay_rate != null
-          ? `${scores.replay_profile} @ ${scores.replay_rate}x`
-          : null],
-      ]) {
-        const term = document.createElement("dt");
-        term.textContent = label;
-        const detail = document.createElement("dd");
-        detail.textContent = value ?? "unavailable";
-        axes.append(term, detail);
-      }
-    }
-    output.replaceChildren(heading, ...(scores ? [axes] : []), pre);
-    history.replaceState(null, "", `#results?submission=${id}`);
+    if (!response.ok) throw new Error(body.error?.message || "The submission could not be queued.");
+
+    form.querySelector("[name=api_key]").value = "";
+    status.textContent = `Queued ${body.id}. Opening its dedicated result page…`;
+    status.className = "success";
+    resetIdempotencyKey();
+    location.assign(`/results/?submission=${encodeURIComponent(body.id)}`);
   } catch (error) {
-    output.textContent = error.message;
+    status.textContent = error.message;
+    status.className = "error";
+  } finally {
+    submit.disabled = false;
   }
 });
 
-const queryId = new URLSearchParams(location.hash.split("?")[1] || "").get("submission");
-if (queryId) {
-  document.querySelector("#submission-id").value = queryId;
-  document.querySelector("#status-form").requestSubmit();
+const legacySubmissionId = new URLSearchParams(location.hash.split("?")[1] || "").get("submission");
+if (legacySubmissionId) {
+  location.replace(`/results/?submission=${encodeURIComponent(legacySubmissionId)}`);
 }

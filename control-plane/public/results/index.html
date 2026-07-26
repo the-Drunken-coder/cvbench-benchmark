@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Review a public CVBench submission with benchmark playback, readable metrics, findings, and exact JSON.">
+    <title>CVBench Results — Public result studio</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/results.js" defer></script>
+  </head>
+  <body class="result-page">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="CVBench home"><span class="brand-mark">CV</span>Bench</a>
+      <nav aria-label="Primary navigation">
+        <a href="/">Home</a>
+        <a href="/scenarios/">Scenarios</a>
+        <a href="/#contract">Contract</a>
+        <a href="/#submit">Submit</a>
+        <a href="/operator.html">Operator</a>
+        <a href="/api/v1/openapi.json">OpenAPI</a>
+      </nav>
+      <span class="live"><span></span> Public results</span>
+    </header>
+
+    <main id="main">
+      <section class="result-page-hero">
+        <p class="eyebrow">Public result studio</p>
+        <h1>Review a run.</h1>
+        <p>One focused page for status, benchmark playback, metrics, findings, and the exact public record.</p>
+        <form id="status-form" class="status-form">
+          <label for="submission-id">Submission UUID</label>
+          <div><input id="submission-id" name="submission" type="text" autocomplete="off" placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx" required><button class="button primary" type="submit">Open result</button></div>
+        </form>
+      </section>
+      <section class="result-page-shell" aria-label="Submission result">
+        <div id="status-output" class="status-output" aria-live="polite"><p>Enter a submission ID to open its public result.</p></div>
+      </section>
+    </main>
+
+    <footer>
+      <a class="brand" href="/"><span class="brand-mark">CV</span>Bench</a>
+      <p>Open evidence for complete computer-vision systems.</p>
+      <div><a href="/#submit">Submit</a><a href="/scenarios/">Scenarios</a><a href="https://github.com/the-Drunken-coder/cvbench-system-runner">GitHub</a><a href="/api/v1/openapi.json">API</a></div>
+    </footer>
+  </body>
+</html>
