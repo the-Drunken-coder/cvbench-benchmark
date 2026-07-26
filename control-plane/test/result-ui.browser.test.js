@@ -209,8 +209,22 @@ test("quick submit safely retries and opens the formatted playback result", asyn
       await page.locator('[data-testid="source-frame"]').getAttribute("src"),
       await page.locator('[data-testid="model-frame"]').getAttribute("src"),
     );
+    await page.locator('[data-testid="comparison-scrubber"]').evaluate((input) => {
+      input.value = "1";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.getByText("No model tracks emitted for this frame.").waitFor();
     await page.getByRole("button", { name: "Close handoff" }).click();
     await page.getByRole("heading", { name: "Close-proximity handoff" }).waitFor();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+      true,
+    );
+    const sourcePane = await page.locator('[data-testid="source-pane"]').boundingBox();
+    const modelPane = await page.locator('[data-testid="model-pane"]').boundingBox();
+    assert.ok(modelPane.y >= sourcePane.y + sourcePane.height, "mobile comparison panes must stack");
 
     await page.goto(`http://127.0.0.1:${server.address().port}/#results?submission=${publicRecord().id}`);
     await page.waitForURL(new RegExp(`/results/\\?submission=${publicRecord().id}$`));
