@@ -113,6 +113,10 @@ def retry_api_request(*args: Any, **kwargs: Any) -> tuple[int, dict[str, Any] | 
     for attempt in range(3):
         try:
             return api_request(*args, **kwargs)
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+            time.sleep(2**attempt)
         except RuntimeError as exc:
             if attempt == 2 or not re.search(r"control-plane request failed \((?:429|5\d\d)\)", str(exc)):
                 raise

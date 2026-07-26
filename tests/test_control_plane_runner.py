@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -94,6 +95,23 @@ def test_retry_api_request_retries_only_transient_http_failures() -> None:
     ):
         retry_api_request("https://cvbench.test", "token", "/overlay")
     assert request.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "transport_error",
+    [urllib.error.URLError("temporary DNS failure"), TimeoutError("socket timed out")],
+)
+def test_retry_api_request_retries_transport_failures(transport_error: OSError) -> None:
+    with (
+        patch(
+            "scripts.run_control_plane_job.api_request",
+            side_effect=[transport_error, (201, {})],
+        ) as request,
+        patch("scripts.run_control_plane_job.time.sleep") as sleep,
+    ):
+        assert retry_api_request("https://cvbench.test", "token", "/overlay") == (201, {})
+    assert request.call_count == 2
+    sleep.assert_called_once_with(1)
 
 
 def test_prediction_overlay_upload_rejects_missing_directories_and_scenarios(tmp_path: Path) -> None:
