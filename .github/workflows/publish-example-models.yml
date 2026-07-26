@@ -22,6 +22,8 @@ jobs:
             dockerfile: examples/Dockerfile.lite-mot
           - image: cvbench-example-balanced-mot
             dockerfile: examples/Dockerfile.balanced-mot
+          - image: cvbench-example-advanced-mot
+            dockerfile: examples/Dockerfile.advanced-mot
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

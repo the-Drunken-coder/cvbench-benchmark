@@ -19,6 +19,11 @@ def test_learned_example_catalog_points_to_runnable_assets() -> None:
             "systems/example-balanced-mot-docker.yaml",
             "cvbench.examples.balanced_mot",
         ),
+        "advanced-mot": (
+            "examples/Dockerfile.advanced-mot",
+            "systems/example-advanced-mot-docker.yaml",
+            "cvbench.examples.advanced_mot",
+        ),
     }
     for name, (dockerfile, manifest, module) in expected.items():
         assert f"{name}/README.md" in catalog
@@ -41,6 +46,11 @@ def test_model_downloads_are_hash_pinned_and_weights_are_not_committed() -> None
             "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_tiny.onnx",
             "427cc366d34e27ff7a03e2899b5e3671425c262ea2291f88bb942bc1cc70b0f7",
             "yolox_tiny.onnx",
+        ),
+        "examples/Dockerfile.advanced-mot": (
+            "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_l.onnx",
+            "7860ae79de6c89a3c1eb72ae9a2756c0ccfbe04b7791bb5880afabd97855a411",
+            "yolox_l.onnx",
         ),
     }
     dockerfiles = [(ROOT / path).read_text() for path in downloads]
