@@ -7,6 +7,7 @@ const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache
 const MAX_SUBMISSION_BYTES = 16 * 1024;
 const MAX_RESULT_BYTES = 1024 * 1024;
 const MAX_PREDICTION_OVERLAY_BYTES = 1536 * 1024;
+const MAX_PREDICTION_OVERLAY_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_OPERATOR_NOTE_BYTES = 8 * 1024;
 const VALID_JOB_STATUSES = new Set(["queued", "running", "succeeded", "failed"]);
 const IMAGE_PATTERN = /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?\/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/;
@@ -69,6 +70,7 @@ export function createApp(options) {
     operatorAdjudicatorCredentials: credentialScopesAreValid ? operatorAdjudicatorCredentials : [],
     maxSubmissionsPerHour: boundedInteger(options.maxSubmissionsPerHour, 20, 1, 1000),
     leaseSeconds: boundedInteger(options.leaseSeconds, 3000, 60, 7200),
+    predictionOverlaysRequired: options.predictionOverlaysRequired !== false,
   };
 
   return {
@@ -151,13 +153,15 @@ async function route(request, config) {
       return problem(404, "not_found", "Prediction overlay not found.");
     }
     const overlay = await config.store.getPredictionOverlay(id, scenarioId);
-    return overlay
-      ? json(overlay.payload, 200, {
-          "cache-control": "public, max-age=31556952, immutable",
-          etag: `"${overlay.sha256}"`,
-          "x-content-type-options": "nosniff",
-        })
-      : problem(404, "prediction_overlay_unavailable", "Model playback is unavailable for this run.");
+    if (!overlay) return problem(404, "prediction_overlay_unavailable", "Model playback is unavailable for this run.");
+    const etag = `"${overlay.sha256}"`;
+    const headers = {
+      "cache-control": "public, max-age=31556952, immutable",
+      etag,
+      "x-content-type-options": "nosniff",
+    };
+    if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
+    return json(overlay.payload, 200, headers);
   }
 
   if (request.method === "POST" && url.pathname === "/api/v1/internal/leases") {
@@ -168,6 +172,7 @@ async function route(request, config) {
       now,
       leaseExpiresAt: now + config.leaseSeconds,
       leaseTokenHash: await sha256(leaseToken),
+      predictionOverlaysRequired: config.predictionOverlaysRequired,
     });
     if (!submission) return new Response(null, { status: 204 });
     return json({
@@ -226,6 +231,9 @@ async function route(request, config) {
     const actual = staged.rows.map((row) => row.scenario_id);
     if (canonicalJson(actual) !== canonicalJson(expected)) {
       return problem(422, "incomplete_prediction_overlay_set", "Every assigned public scenario must be staged exactly once.");
+    }
+    if (staged.rows.reduce((total, row) => total + row.byte_count, 0) > MAX_PREDICTION_OVERLAY_TOTAL_BYTES) {
+      return problem(422, "prediction_overlay_budget_exceeded", "The prediction overlay set exceeds its public storage budget.");
     }
     const rootSha256 = await sha256(canonicalJson(staged.rows.map((row) => ({
       scenario_id: row.scenario_id,

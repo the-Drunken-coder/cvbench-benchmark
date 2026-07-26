@@ -127,21 +127,29 @@ export class D1Store {
     }));
   }
 
-  async leaseJob({ now, leaseExpiresAt, leaseTokenHash }) {
+  async leaseJob({ now, leaseExpiresAt, leaseTokenHash, predictionOverlaysRequired }) {
     await this.requeueExpired(now);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const queued = await this.db
-        .prepare("SELECT id FROM submissions WHERE status = 'queued' ORDER BY created_at, id LIMIT 1")
+        .prepare("SELECT id, attempt FROM submissions WHERE status = 'queued' ORDER BY created_at, id LIMIT 1")
         .first();
       if (!queued) return null;
+      await this.db
+        .prepare("DELETE FROM prediction_overlays WHERE submission_id = ? AND attempt <= ?")
+        .bind(queued.id, queued.attempt)
+        .run();
+      await this.db
+        .prepare("DELETE FROM prediction_overlay_sets WHERE submission_id = ? AND attempt <= ?")
+        .bind(queued.id, queued.attempt)
+        .run();
       const changed = await this.db
         .prepare(`UPDATE submissions SET status = 'running', lease_token_sha256 = ?,
-          lease_expires_at = ?, attempt = attempt + 1, prediction_overlays_required = 1,
+          lease_expires_at = ?, attempt = attempt + 1, prediction_overlays_required = ?,
           prediction_overlay_attempt = NULL, prediction_overlay_root_sha256 = NULL,
           started_at = COALESCE(started_at, ?), updated_at = ?
           WHERE id = ? AND status = 'queued'`)
-        .bind(leaseTokenHash, leaseExpiresAt, now, now, queued.id)
+        .bind(leaseTokenHash, leaseExpiresAt, predictionOverlaysRequired ? 1 : 0, now, now, queued.id)
         .run();
       if (Number(changed.meta?.changes || 0) === 1) return this.getSubmission(queued.id);
     }
@@ -165,20 +173,28 @@ export class D1Store {
       .bind(id, leaseTokenHash, now)
       .first();
     if (!submission) return { kind: "invalid_transition" };
-    const existing = await this.db
+    const changed = await this.db
+      .prepare(`INSERT OR IGNORE INTO prediction_overlays (
+        submission_id, attempt, scenario_id, payload_json, payload_sha256,
+        byte_count, prediction_count, created_at
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (
+        SELECT 1 FROM submissions
+        WHERE id = ? AND attempt = ? AND status = 'running'
+          AND lease_token_sha256 = ? AND lease_expires_at >= ?
+      )`)
+      .bind(
+        id, submission.attempt, scenarioId, payloadJson, payloadSha256, byteCount, predictionCount, now,
+        id, submission.attempt, leaseTokenHash, now,
+      )
+      .run();
+    const stored = await this.db
       .prepare(`SELECT payload_sha256 FROM prediction_overlays
         WHERE submission_id = ? AND attempt = ? AND scenario_id = ?`)
       .bind(id, submission.attempt, scenarioId)
       .first();
-    if (existing) return { kind: existing.payload_sha256 === payloadSha256 ? "replay" : "conflict" };
-    await this.db
-      .prepare(`INSERT INTO prediction_overlays (
-        submission_id, attempt, scenario_id, payload_json, payload_sha256,
-        byte_count, prediction_count, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(id, submission.attempt, scenarioId, payloadJson, payloadSha256, byteCount, predictionCount, now)
-      .run();
-    return { kind: "created" };
+    if (!stored) return { kind: "invalid_transition" };
+    if (Number(changed.meta?.changes || 0) === 1) return { kind: "created" };
+    return { kind: stored.payload_sha256 === payloadSha256 ? "replay" : "conflict" };
   }
 
   async stagedPredictionOverlays({ id, leaseTokenHash, now }) {
@@ -189,7 +205,7 @@ export class D1Store {
       .first();
     if (!submission) return null;
     const result = await this.db
-      .prepare(`SELECT scenario_id, payload_sha256 FROM prediction_overlays
+      .prepare(`SELECT scenario_id, payload_sha256, byte_count FROM prediction_overlays
         WHERE submission_id = ? AND attempt = ? ORDER BY scenario_id`)
       .bind(id, submission.attempt)
       .all();
@@ -197,13 +213,8 @@ export class D1Store {
   }
 
   async sealPredictionOverlays({ id, attempt, leaseTokenHash, rootSha256, now }) {
-    const existing = await this.db
-      .prepare("SELECT root_sha256 FROM prediction_overlay_sets WHERE submission_id = ? AND attempt = ?")
-      .bind(id, attempt)
-      .first();
-    if (existing) return { kind: existing.root_sha256 === rootSha256 ? "replay" : "conflict" };
     const changed = await this.db
-      .prepare(`INSERT INTO prediction_overlay_sets (submission_id, attempt, root_sha256, sealed_at)
+      .prepare(`INSERT OR IGNORE INTO prediction_overlay_sets (submission_id, attempt, root_sha256, sealed_at)
         SELECT ?, ?, ?, ? WHERE EXISTS (
           SELECT 1 FROM submissions
           WHERE id = ? AND attempt = ? AND status = 'running'
@@ -211,7 +222,13 @@ export class D1Store {
         )`)
       .bind(id, attempt, rootSha256, now, id, attempt, leaseTokenHash, now)
       .run();
-    return { kind: Number(changed.meta?.changes || 0) === 1 ? "created" : "invalid_transition" };
+    const stored = await this.db
+      .prepare("SELECT root_sha256 FROM prediction_overlay_sets WHERE submission_id = ? AND attempt = ?")
+      .bind(id, attempt)
+      .first();
+    if (!stored) return { kind: "invalid_transition" };
+    if (Number(changed.meta?.changes || 0) === 1) return { kind: "created" };
+    return { kind: stored.root_sha256 === rootSha256 ? "replay" : "conflict" };
   }
 
   async getPredictionOverlay(id, scenarioId) {

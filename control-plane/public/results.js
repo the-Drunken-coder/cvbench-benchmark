@@ -14,10 +14,23 @@ function element(tag, text, className) {
 
 function scenarioLabel(id) {
   return {
+    "synthetic-acquisition": "Initial acquisition",
+    "synthetic-false-detection": "False detection rejection",
+    "synthetic-multi-target-identity": "Multi-target identity",
+    "synthetic-multi-target-pair": "Paired targets",
+    "synthetic-occlusion-gap-100ms": "Occlusion · 100 ms",
+    "synthetic-occlusion-gap-250ms": "Occlusion · 250 ms",
+    "synthetic-occlusion-gap-500ms": "Occlusion · 500 ms",
+    "synthetic-occlusion-gap-1000ms": "Occlusion · 1 second",
+    "synthetic-occlusion-gap-2000ms": "Occlusion · 2 seconds",
+    "synthetic-occlusion-reacquisition": "Occlusion reacquisition",
+    "synthetic-resource-stress": "Resource stress",
+    "synthetic-track-id-churn": "Track identity stability",
+    "synthetic-visible-retention": "Visible target retention",
     "rvmot-a1c9": "Loading + occlusion",
     "rvmot-b7e2": "Close handoff",
     "rvmot-c4f6": "Wide parking view",
-  }[id] || id.replaceAll("-", " ");
+  }[id] || id.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function svgElement(tag, attributes = {}) {
@@ -266,9 +279,16 @@ async function loadPlaybackScenario(id, view) {
       return;
     }
     try {
-      const modelArtifact = await fetchJson(
-        `/api/v1/submissions/${encodeURIComponent(view.submissionId)}/prediction-overlays/${encodeURIComponent(id)}`,
-      );
+      const template = view.overlayAvailability.scenario_url_template;
+      if (typeof template !== "string" || !template.includes("{scenario_id}")) {
+        throw new Error("The model playback location is invalid.");
+      }
+      const overlayUrl = new URL(template.replace("{scenario_id}", encodeURIComponent(id)), location.origin);
+      const expectedPrefix = `/api/v1/submissions/${encodeURIComponent(view.submissionId)}/prediction-overlays/`;
+      if (overlayUrl.origin !== location.origin || !overlayUrl.pathname.startsWith(expectedPrefix)) {
+        throw new Error("The model playback location is invalid.");
+      }
+      const modelArtifact = await fetchJson(overlayUrl);
       if (!playback || generation !== playbackGeneration) return;
       playback.modelArtifact = modelArtifact;
       if (modelArtifact.state === "unavailable") {

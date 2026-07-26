@@ -31,6 +31,7 @@ beforeEach(() => {
     },
     maxSubmissionsPerHour: 2,
     leaseSeconds: 3000,
+    predictionOverlaysRequired: false,
   });
 });
 
@@ -738,48 +739,70 @@ test("the configured lease accepts a callback through the full 3000-second budge
 });
 
 test("prediction overlays are lease-bound, complete, sanitized, and public only after success", async () => {
-  store.predictionOverlaysRequired = true;
+  app = createApp({
+    store,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+    operatorReadKeys: OPERATOR_READ_TOKEN,
+    operatorAdjudicatorCredentials: {
+      "operator/alice": OPERATOR_WRITE_TOKEN,
+      "operator/bob": OPERATOR_SECOND_WRITE_TOKEN,
+    },
+    maxSubmissionsPerHour: 2,
+    leaseSeconds: 3000,
+    predictionOverlaysRequired: true,
+  });
   const created = await (await submit(validBody(), "prediction-overlay-0001")).json();
+  const overlayPayload = (scenarioId, confidence = 0.9) => ({
+    schema_version: "cvbench.prediction-overlay/v1",
+    state: "complete",
+    scenario_id: scenarioId,
+    width: 100,
+    height: 80,
+    frame_count: 1,
+    frames: [{
+      frame_index: 0,
+      source_timestamp_ns: 0,
+      objects: [{
+        track_label: "track-001",
+        class_id: "person",
+        event: "track_update",
+        state: "confirmed",
+        support: "observed",
+        confidence,
+        bbox_xyxy: [1, 2, 30, 40],
+      }],
+    }],
+    summary: { prediction_count: 1 },
+  });
+  const upload = (scenarioId, leaseToken, payload = overlayPayload(scenarioId)) => request(
+    `/api/v1/internal/submissions/${created.id}/prediction-overlays/${scenarioId}`,
+    {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${RUNNER_TOKEN}`,
+        "content-type": "application/json",
+        "x-cvbench-lease-token": leaseToken,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  assert.equal((await upload("not-a-public-scenario", "a".repeat(64))).status, 404);
+  assert.equal((await upload(PUBLIC_BENCHMARK.scenario_ids[0], "a".repeat(64))).status, 409);
   const leased = await (await lease()).json();
   const callbackBody = { status: "succeeded", lease_token: leased.lease.token, report: scoredReport() };
   assert.equal((await result(created.id, callbackBody)).status, 409);
 
-  for (const scenarioId of PUBLIC_BENCHMARK.scenario_ids) {
-    const payload = {
-      schema_version: "cvbench.prediction-overlay/v1",
-      state: "complete",
-      scenario_id: scenarioId,
-      width: 100,
-      height: 80,
-      frame_count: 1,
-      frames: [{
-        frame_index: 0,
-        source_timestamp_ns: 0,
-        objects: [{
-          track_label: "track-001",
-          class_id: "person",
-          event: "track_update",
-          state: "confirmed",
-          support: "observed",
-          confidence: 0.9,
-          bbox_xyxy: [1, 2, 30, 40],
-        }],
-      }],
-      summary: { prediction_count: 1 },
-    };
-    const uploaded = await request(
-      `/api/v1/internal/submissions/${created.id}/prediction-overlays/${scenarioId}`,
-      {
-        method: "PUT",
-        headers: {
-          authorization: `Bearer ${RUNNER_TOKEN}`,
-          "content-type": "application/json",
-          "x-cvbench-lease-token": leased.lease.token,
-        },
-        body: JSON.stringify(payload),
-      },
-    );
-    assert.equal(uploaded.status, 201);
+  const [firstScenario, ...remainingScenarios] = PUBLIC_BENCHMARK.scenario_ids;
+  assert.equal((await upload(firstScenario, leased.lease.token)).status, 201);
+  assert.equal((await upload(firstScenario, leased.lease.token)).status, 200);
+  assert.equal(
+    (await upload(firstScenario, leased.lease.token, overlayPayload(firstScenario, 0.8))).status,
+    409,
+  );
+  for (const scenarioId of remainingScenarios) {
+    assert.equal((await upload(scenarioId, leased.lease.token)).status, 201);
   }
 
   assert.equal(
@@ -802,7 +825,13 @@ test("prediction overlays are lease-bound, complete, sanitized, and public only 
   const publicOverlay = await request(`/api/v1/submissions/${created.id}/prediction-overlays/rvmot-a1c9`);
   assert.equal(publicOverlay.status, 200);
   assert.match(publicOverlay.headers.get("cache-control"), /immutable/);
+  const etag = publicOverlay.headers.get("etag");
   assert.equal((await publicOverlay.json()).frames[0].objects[0].track_label, "track-001");
+  const notModified = await request(
+    `/api/v1/submissions/${created.id}/prediction-overlays/rvmot-a1c9`,
+    { headers: { "if-none-match": etag } },
+  );
+  assert.equal(notModified.status, 304);
 });
 
 function validBody() {

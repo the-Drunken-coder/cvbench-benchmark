@@ -120,6 +120,8 @@ test("quick submit safely retries and opens the formatted playback result", asyn
   const idempotencyKeys = [];
   let postedBody = null;
   let postAttempts = 0;
+  let currentRecord = publicRecord();
+  let artifactUnavailable = false;
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
@@ -130,7 +132,17 @@ test("quick submit safely retries and opens the formatted playback result", asyn
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
+        body: JSON.stringify(artifactUnavailable ? {
+          schema_version: "cvbench.prediction-overlay/v1",
+          state: "unavailable",
+          reason: "budget_exceeded",
+          scenario_id: scenarioId,
+          width: 896,
+          height: 504,
+          frame_count: 150,
+          frames: [],
+          summary: { prediction_count: 0 },
+        } : {
           schema_version: "cvbench.prediction-overlay/v1",
           state: "complete",
           scenario_id: scenarioId,
@@ -168,7 +180,7 @@ test("quick submit safely retries and opens the formatted playback result", asyn
         return;
       }
     }
-    await route.fulfill({ status: request.method() === "POST" ? 201 : 200, contentType: "application/json", body: JSON.stringify(publicRecord()) });
+    await route.fulfill({ status: request.method() === "POST" ? 201 : 200, contentType: "application/json", body: JSON.stringify(currentRecord) });
   });
 
   try {
@@ -226,6 +238,17 @@ test("quick submit safely retries and opens the formatted playback result", asyn
     const modelPane = await page.locator('[data-testid="model-pane"]').boundingBox();
     assert.ok(modelPane.y >= sourcePane.y + sourcePane.height, "mobile comparison panes must stack");
 
+    artifactUnavailable = true;
+    await page.goto(`http://127.0.0.1:${server.address().port}/results/?submission=${currentRecord.id}`);
+    await page.getByText("Model playback unavailable — the run exceeded the safe visualization budget.").waitFor();
+
+    artifactUnavailable = false;
+    currentRecord = publicRecord();
+    currentRecord.result.prediction_overlay = { state: "unavailable", reason: "legacy_run" };
+    await page.goto(`http://127.0.0.1:${server.address().port}/results/?submission=${currentRecord.id}`);
+    await page.getByText("Model playback unavailable — this run predates overlay retention.").waitFor();
+
+    currentRecord = publicRecord();
     await page.goto(`http://127.0.0.1:${server.address().port}/#results?submission=${publicRecord().id}`);
     await page.waitForURL(new RegExp(`/results/\\?submission=${publicRecord().id}$`));
     await page.getByRole("heading", { name: "CVBench Synthetic Color Tracker" }).waitFor();

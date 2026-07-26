@@ -90,7 +90,7 @@ export class MemoryStore {
       .map(clone);
   }
 
-  async leaseJob({ now, leaseExpiresAt, leaseTokenHash }) {
+  async leaseJob({ now, leaseExpiresAt, leaseTokenHash, predictionOverlaysRequired }) {
     await this.requeueExpired(now);
     const queued = [...this.rows.values()]
       .filter((row) => row.status === "queued")
@@ -103,10 +103,16 @@ export class MemoryStore {
       updatedAt: now,
       leaseExpiresAt,
       leaseTokenHash,
-      predictionOverlaysRequired: this.predictionOverlaysRequired === true,
+      predictionOverlaysRequired,
       predictionOverlayAttempt: null,
       predictionOverlayRootSha256: null,
     });
+    for (const [key, item] of this.overlays || []) {
+      if (item.id === queued.id && item.attempt !== queued.attempt) this.overlays.delete(key);
+    }
+    for (const key of this.overlaySets?.keys() || []) {
+      if (key.startsWith(`${queued.id}:`) && key !== `${queued.id}:${queued.attempt}`) this.overlaySets.delete(key);
+    }
     return clone(queued);
   }
 
@@ -164,7 +170,11 @@ export class MemoryStore {
       rows: [...(this.overlays?.values() || [])]
         .filter((item) => item.id === id && item.attempt === row.attempt)
         .sort((left, right) => left.scenarioId.localeCompare(right.scenarioId))
-        .map((item) => ({ scenario_id: item.scenarioId, payload_sha256: item.payloadSha256 })),
+        .map((item) => ({
+          scenario_id: item.scenarioId,
+          payload_sha256: item.payloadSha256,
+          byte_count: item.byteCount,
+        })),
     };
   }
 

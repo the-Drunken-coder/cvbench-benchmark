@@ -158,14 +158,17 @@ def _clean_object(
         if isinstance(raw_class, str) and SAFE_CLASS.fullmatch(raw_class) and raw_class in PUBLIC_CLASSES
         else "other"
     )
+    rounded_box = [round(value, 2) for value in (x1, y1, x2, y2)]
+    if rounded_box[0] >= rounded_box[2] or rounded_box[1] >= rounded_box[3]:
+        return None
     return {
         "track_label": track_label,
         "class_id": class_id,
         "event": event,
         "state": state,
         "support": support,
-        "confidence": round(float(confidence), 4),
-        "bbox_xyxy": [round(value, 2) for value in (x1, y1, x2, y2)],
+        "confidence": round(min(1.0, max(0.0, float(confidence))), 4),
+        "bbox_xyxy": rounded_box,
     }
 
 

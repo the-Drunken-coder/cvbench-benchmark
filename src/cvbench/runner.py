@@ -789,12 +789,6 @@ def run_benchmark(benchmark_path: str | Path, system_path: str | Path, output_ro
         resources_csv.write_text("elapsed_ms,cpu_percent,memory_bytes\n")
     raw_output = run_dir / "system-output.jsonl"
     raw_output.write_text("".join(json.dumps(item.as_dict(), sort_keys=True) + "\n" for item in collected))
-    write_prediction_overlays(
-        run_dir / "prediction-overlays",
-        scenarios,
-        scored_collected,
-        sequence_timestamps,
-    )
     (run_dir / "matching-decisions.jsonl").write_text(
         "".join(
             json.dumps(
@@ -971,6 +965,12 @@ def run_benchmark(benchmark_path: str | Path, system_path: str | Path, output_ro
         baseline = json.loads(benchmark.baseline_report.read_text())
         report["comparison"] = compare_reports(baseline, report)
     report_json, report_html = write_report_files(run_dir, report)
+    write_prediction_overlays(
+        run_dir / "prediction-overlays",
+        scenarios,
+        scored_collected,
+        sequence_timestamps,
+    )
     if benchmark.reporting["generate_failure_packets"]:
         generate_evidence_packets(
             run_dir, findings, scenarios, ground_truth, collected, matches, resources_csv, command
