@@ -82,3 +82,50 @@ def test_track_ends_once_immediately_after_profile_coasting_limit() -> None:
         ("track_ended", "lost", "predicted")
     ]
     assert tracker.update([], 100, 100) == []
+
+
+def test_advanced_profile_uses_native_yolox_l_input_and_long_reactivation() -> None:
+    profile = PROFILES["advanced"]
+    assert profile.input_size == 640
+    assert profile.inference_interval == 15
+    assert profile.max_misses == 90
+    assert profile.observation_centric is True
+
+
+def test_optical_flow_propagates_track_from_current_pixels() -> None:
+    previous = np.zeros((80, 100), dtype=np.uint8)
+    current = np.zeros_like(previous)
+    cv2.rectangle(previous, (20, 20), (39, 39), 255, -1)
+    cv2.rectangle(current, (24, 22), (43, 41), 255, -1)
+    track = OnlineTracker(PROFILES["advanced"]).update(
+        [Detection((20.0, 20.0, 40.0, 40.0), "person", 0.9)],
+        100,
+        80,
+    )[0][1]
+
+    detections = YoloXDetector._optical_detections(previous, current, [track], 100, 80)
+
+    assert len(detections) == 1
+    assert detections[0].class_id == "person"
+    assert detections[0].box[0] > 21.0
+    assert detections[0].box[1] > 20.5
+
+
+def test_static_optical_track_is_not_reacquired_and_expires() -> None:
+    image = np.zeros((80, 100), dtype=np.uint8)
+    tracker = OnlineTracker(PROFILES["advanced"])
+    tracker.update([Detection((20.0, 20.0, 40.0, 40.0), "person", 0.9)], 100, 80)
+    tracker.update([Detection((20.0, 20.0, 40.0, 40.0), "person", 0.9)], 100, 80)
+
+    for _ in range(PROFILES["advanced"].coast_frames):
+        detections = YoloXDetector._optical_detections(
+            image,
+            image,
+            list(tracker.tracks.values()),
+            100,
+            80,
+        )
+        assert detections == []
+        assert tracker.update(detections, 100, 80)[0][2:] == ("coasting", "predicted")
+
+    assert tracker.update([], 100, 80)[0][0] == "track_ended"

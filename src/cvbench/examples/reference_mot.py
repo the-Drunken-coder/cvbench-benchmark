@@ -1,9 +1,10 @@
 """Learned, class-aware reference trackers for the public CVBench suite.
 
-The two profiles share a YOLOX COCO detector and the CVBench protocol adapter:
+The profiles share a YOLOX COCO detector and the CVBench protocol adapter:
 
 * ``lite`` uses YOLOX-Nano with ByteTrack-style two-pass association.
 * ``balanced`` uses YOLOX-Tiny with observation-centric motion association.
+* ``advanced`` uses YOLOX-L at 640 pixels with persistent track reactivation.
 
 Both profiles include a deterministic pixel-only detector for the small green
 synthetic targets. They never inspect scenario identifiers, ground truth, or
@@ -42,6 +43,8 @@ COCO_CLASS_MAP = {
 class Profile:
     name: str
     default_model_path: str
+    input_size: int
+    inference_interval: int
     high_score: float
     low_score: float
     match_score: float
@@ -54,6 +57,8 @@ PROFILES = {
     "lite": Profile(
         name="lite",
         default_model_path="/app/models/yolox_nano.onnx",
+        input_size=416,
+        inference_interval=1,
         high_score=0.30,
         low_score=0.08,
         match_score=0.14,
@@ -64,11 +69,25 @@ PROFILES = {
     "balanced": Profile(
         name="balanced",
         default_model_path="/app/models/yolox_tiny.onnx",
+        input_size=416,
+        inference_interval=1,
         high_score=0.42,
         low_score=0.10,
         match_score=0.10,
         max_misses=60,
         coast_frames=3,
+        observation_centric=True,
+    ),
+    "advanced": Profile(
+        name="advanced",
+        default_model_path="/app/models/yolox_l.onnx",
+        input_size=640,
+        inference_interval=15,
+        high_score=0.30,
+        low_score=0.05,
+        match_score=0.08,
+        max_misses=90,
+        coast_frames=4,
         observation_centric=True,
     ),
 }
@@ -140,18 +159,21 @@ def _nms(detections: list[Detection], threshold: float = 0.45) -> list[Detection
 
 
 class YoloXDetector:
-    def __init__(self, model_path: str, *, input_size: int = 416):
+    def __init__(self, model_path: str, *, input_size: int = 416, inference_interval: int = 1):
         path = Path(model_path)
         if not path.is_file():
             raise FileNotFoundError(f"YOLOX model not found: {path}")
         self.input_size = input_size
+        self.inference_interval = inference_interval
         self.net = cv2.dnn.readNetFromONNX(str(path))
         self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
         self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
         self.previous_gray: np.ndarray | None = None
+        self.frame_index = 0
 
     def reset_stream(self) -> None:
         self.previous_gray = None
+        self.frame_index = 0
 
     @staticmethod
     def _synthetic_detections(image: np.ndarray) -> list[Detection]:
@@ -175,7 +197,62 @@ class YoloXDetector:
                 )
         return sorted(detections, key=lambda item: (item.box[0], item.box[1]))
 
-    def detect(self, payload: bytes, minimum_score: float) -> list[Detection]:
+    @staticmethod
+    def _optical_detections(
+        previous_gray: np.ndarray,
+        gray: np.ndarray,
+        tracks: list[Track],
+        width: int,
+        height: int,
+    ) -> list[Detection]:
+        flow = cv2.calcOpticalFlowFarneback(
+            previous_gray,
+            gray,
+            None,
+            0.5,
+            3,
+            15,
+            2,
+            5,
+            1.1,
+            0,
+        )
+        detections: list[Detection] = []
+        for track in tracks:
+            if track.ended:
+                continue
+            x1, y1, x2, y2 = (round(value) for value in track.box)
+            region = flow[max(0, y1) : min(height, y2), max(0, x1) : min(width, x2)]
+            if region.size == 0:
+                continue
+            dx, dy = np.median(region.reshape(-1, 2), axis=0)
+            if math.hypot(float(dx), float(dy)) < 0.05:
+                continue
+            box = _clamp(
+                (
+                    track.box[0] + float(dx),
+                    track.box[1] + float(dy),
+                    track.box[2] + float(dx),
+                    track.box[3] + float(dy),
+                ),
+                width,
+                height,
+            )
+            detections.append(
+                Detection(
+                    box,
+                    track.class_id,
+                    max(0.31, track.confidence * 0.98),
+                )
+            )
+        return detections
+
+    def detect(
+        self,
+        payload: bytes,
+        minimum_score: float,
+        tracks: list[Track] | None = None,
+    ) -> list[Detection]:
         image = cv2.imdecode(np.frombuffer(payload, dtype=np.uint8), cv2.IMREAD_COLOR)
         if image is None:
             return []
@@ -185,10 +262,15 @@ class YoloXDetector:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         previous_gray = self.previous_gray
         self.previous_gray = gray
+        self.frame_index += 1
         if previous_gray is None:
             return []
 
         height, width = image.shape[:2]
+        should_infer = self.frame_index == 2 or (self.frame_index - 2) % self.inference_interval == 0
+        if not should_infer:
+            return self._optical_detections(previous_gray, gray, tracks or [], width, height)
+
         ratio = min(self.input_size / height, self.input_size / width)
         resized = cv2.resize(
             image,
@@ -437,7 +519,11 @@ def _connect(path: str) -> socket.socket:
 def run(profile_name: str) -> int:
     profile = PROFILES[profile_name]
     cv2.setNumThreads(max(1, int(os.environ.get("CVBENCH_OPENCV_THREADS", "4"))))
-    detector = YoloXDetector(os.environ.get("CVBENCH_MODEL_PATH", profile.default_model_path))
+    detector = YoloXDetector(
+        os.environ.get("CVBENCH_MODEL_PATH", profile.default_model_path),
+        input_size=profile.input_size,
+        inference_interval=profile.inference_interval,
+    )
     tracker = OnlineTracker(profile)
     sock = _connect(os.environ.get("CVBENCH_INPUT_SOCKET", "/run/cvbench/input.sock"))
     print("CVBENCH_READY", flush=True)
@@ -461,7 +547,7 @@ def run(profile_name: str) -> int:
                 continue
             if event != "frame":
                 continue
-            detections = detector.detect(payload, profile.low_score)
+            detections = detector.detect(payload, profile.low_score, list(tracker.tracks.values()))
             for output in tracker.update(detections, int(metadata["width"]), int(metadata["height"])):
                 _emit(metadata, *output)
     return 0
@@ -473,6 +559,10 @@ def lite_main() -> int:
 
 def balanced_main() -> int:
     return run("balanced")
+
+
+def advanced_main() -> int:
+    return run("advanced")
 
 
 if __name__ == "__main__":

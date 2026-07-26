@@ -24,6 +24,7 @@ Build the learned references from the repository root:
 ```bash
 docker build -f examples/Dockerfile.lite-mot -t cvbench-example-lite-mot:v1 .
 docker build -f examples/Dockerfile.balanced-mot -t cvbench-example-balanced-mot:v1 .
+docker build -f examples/Dockerfile.advanced-mot -t cvbench-example-advanced-mot:v1 .
 ```
 
 Each build downloads one official YOLOX ONNX checkpoint and verifies its
