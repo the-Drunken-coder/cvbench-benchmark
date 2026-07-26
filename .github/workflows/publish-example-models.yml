@@ -35,7 +35,7 @@ jobs:
 
       - name: Build and publish the linux/amd64 image
         run: |
-          short_sha="${GITHUB_SHA:0:7}"
+          short_sha="$(git rev-parse --short=7 HEAD)"
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}"
           docker buildx build \
             --platform linux/amd64 \
