@@ -382,7 +382,7 @@ class OnlineTracker:
                 track.ended = True
             elif track.misses <= self.profile.coast_frames:
                 outputs.append(("track_update", track, "coasting", "predicted"))
-            elif track.misses == 6 and not track.ended:
+            elif not track.ended:
                 track.ended = True
                 outputs.append(("track_ended", track, "lost", "predicted"))
         return outputs

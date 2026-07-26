@@ -67,3 +67,18 @@ def test_confirmed_track_coasts_and_reacquires_with_same_id() -> None:
     assert reacquired[0][0] == "track_reacquired"
     assert reacquired[0][1].identifier == identifier
     assert reacquired[0][2:] == ("reacquired", "observed")
+
+
+def test_track_ends_once_immediately_after_profile_coasting_limit() -> None:
+    tracker = OnlineTracker(PROFILES["lite"])
+    detection = Detection((10.0, 10.0, 30.0, 30.0), "person", 0.9)
+    tracker.update([detection], 100, 100)
+    tracker.update([detection], 100, 100)
+
+    for _ in range(PROFILES["lite"].coast_frames):
+        assert tracker.update([], 100, 100)[0][2:] == ("coasting", "predicted")
+    ended = tracker.update([], 100, 100)
+    assert [(event, state, support) for event, _, state, support in ended] == [
+        ("track_ended", "lost", "predicted")
+    ]
+    assert tracker.update([], 100, 100) == []
