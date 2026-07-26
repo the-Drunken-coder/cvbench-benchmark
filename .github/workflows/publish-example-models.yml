@@ -45,13 +45,8 @@ jobs:
             --push \
             .
 
-      - name: Make the example image public
-        run: gh api --method PATCH "/user/packages/container/${{ matrix.image }}" -f visibility=public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Verify unauthenticated registry access
         run: |
           docker logout ghcr.io
-          docker buildx imagetools inspect \
+          docker manifest inspect \
             "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}:v1"
