@@ -308,7 +308,8 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   assert.match(javascript[0], /crypto\.randomUUID\(\)/);
   assert.match(javascript[0], /\/results\/\?submission=/);
   assert.match(javascript[1], /scores\.replay_profile != null && scores\.replay_rate != null/);
-  assert.match(javascript[1], /These overlays are not the submitted system’s predictions/);
+  assert.match(javascript[1], /same exact frame and shared controls/);
+  assert.match(javascript[1], /submitted system’s retained track projection/);
   assert.doesNotMatch(javascript[0], /(?:local|session)Storage/);
   assert.doesNotMatch(javascript[1], /(?:local|session)Storage/);
   const headers = await readFile(path.join(CONTROL_PLANE, "public/_headers"), "utf8");

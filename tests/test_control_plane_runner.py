@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -21,6 +22,7 @@ from scripts.run_control_plane_job import (
     PUBLIC_LEADERBOARD_POLICY,
     PUBLIC_REPLAY_PROFILE,
     PUBLIC_REPLAY_RATE,
+    PUBLIC_SCENARIO_IDS,
     PUBLIC_TIMING_COMPUTE_CONTRACT,
     SECRET_ENVIRONMENT_KEYS,
     build_success_callback,
@@ -29,7 +31,9 @@ from scripts.run_control_plane_job import (
     cleanup_benchmark_containers,
     execute_submission,
     main,
+    retry_api_request,
     sanitized_environment,
+    upload_prediction_overlays,
     validate_lease,
     write_system_config,
 )
@@ -46,6 +50,85 @@ BENCHMARK = {
     "replay_rate": PUBLIC_REPLAY_RATE,
     "leaderboard_policy": PUBLIC_LEADERBOARD_POLICY,
 }
+
+
+def test_prediction_overlay_uploads_exact_suite_then_seals(tmp_path: Path) -> None:
+    overlay_dir = tmp_path / "runs" / "run-1" / "prediction-overlays"
+    overlay_dir.mkdir(parents=True)
+    for scenario_id in PUBLIC_SCENARIO_IDS:
+        (overlay_dir / f"{scenario_id}.json").write_text(json.dumps({"scenario_id": scenario_id}))
+    with patch("scripts.run_control_plane_job.api_request", return_value=(201, {})) as request:
+        upload_prediction_overlays(
+            "https://cvbench.test",
+            "runner-token",
+            "12345678-1234-4123-8123-123456789abc",
+            "b" * 64,
+            tmp_path,
+        )
+    assert request.call_count == len(PUBLIC_SCENARIO_IDS) + 1
+    assert all(call.kwargs["method"] == "PUT" for call in request.call_args_list[:-1])
+    assert all(
+        call.kwargs["headers"]["X-CVBench-Lease-Token"] == "b" * 64
+        for call in request.call_args_list[:-1]
+    )
+    assert request.call_args_list[-1].kwargs["body"] == {"lease_token": "b" * 64}
+
+
+def test_retry_api_request_retries_only_transient_http_failures() -> None:
+    with (
+        patch(
+            "scripts.run_control_plane_job.api_request",
+            side_effect=[RuntimeError("control-plane request failed (503): busy"), (201, {})],
+        ) as request,
+        patch("scripts.run_control_plane_job.time.sleep") as sleep,
+    ):
+        assert retry_api_request("https://cvbench.test", "token", "/overlay") == (201, {})
+    assert request.call_count == 2
+    sleep.assert_called_once_with(1)
+
+    with (
+        patch(
+            "scripts.run_control_plane_job.api_request",
+            side_effect=RuntimeError("control-plane request failed (400): invalid"),
+        ) as request,
+        pytest.raises(RuntimeError, match=r"\(400\)"),
+    ):
+        retry_api_request("https://cvbench.test", "token", "/overlay")
+    assert request.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "transport_error",
+    [urllib.error.URLError("temporary DNS failure"), TimeoutError("socket timed out")],
+)
+def test_retry_api_request_retries_transport_failures(transport_error: OSError) -> None:
+    with (
+        patch(
+            "scripts.run_control_plane_job.api_request",
+            side_effect=[transport_error, (201, {})],
+        ) as request,
+        patch("scripts.run_control_plane_job.time.sleep") as sleep,
+    ):
+        assert retry_api_request("https://cvbench.test", "token", "/overlay") == (201, {})
+    assert request.call_count == 2
+    sleep.assert_called_once_with(1)
+
+
+def test_prediction_overlay_upload_rejects_missing_directories_and_scenarios(tmp_path: Path) -> None:
+    args = (
+        "https://cvbench.test",
+        "runner-token",
+        "12345678-1234-4123-8123-123456789abc",
+        "b" * 64,
+    )
+    with pytest.raises(RuntimeError, match="exactly one"):
+        upload_prediction_overlays(*args, tmp_path)
+
+    overlay_dir = tmp_path / "runs" / "run-1" / "prediction-overlays"
+    overlay_dir.mkdir(parents=True)
+    (overlay_dir / "synthetic-acquisition.json").write_text("{}")
+    with pytest.raises(RuntimeError, match="does not match"):
+        upload_prediction_overlays(*args, tmp_path)
 
 
 def test_image_pattern_requires_digest_and_rejects_shell_like_input() -> None:
@@ -242,11 +325,34 @@ def test_transient_success_callback_failure_never_emits_failed_callback(monkeypa
             side_effect=[(200, lease), RuntimeError("transient callback failure")],
         ) as request,
         patch("scripts.run_control_plane_job.execute_submission", return_value={"outcome": {"status": "completed"}}),
+        patch("scripts.run_control_plane_job.upload_prediction_overlays"),
     ):
         assert main() == 1
 
     assert request.call_count == 2
     assert request.call_args_list[1].kwargs["body"]["status"] == "succeeded"
+
+
+def test_overlay_transport_failure_never_emits_failed_callback(monkeypatch: pytest.MonkeyPatch) -> None:
+    submission = {
+        "id": "12345678-1234-4123-8123-123456789abc",
+        "image": IMAGE,
+        "argv": ["python", "-m", "tracker"],
+    }
+    lease = {"submission": {**submission, "benchmark": BENCHMARK}, "lease": {"token": "b" * 64}}
+    monkeypatch.setenv("CVBENCH_API_BASE_URL", "https://cvbench.test")
+    monkeypatch.setenv("CVBENCH_RUNNER_TOKEN", "runner-token")
+    with (
+        patch("scripts.run_control_plane_job.api_request", return_value=(200, lease)) as request,
+        patch("scripts.run_control_plane_job.execute_submission", return_value={"outcome": {"status": "completed"}}),
+        patch(
+            "scripts.run_control_plane_job.upload_prediction_overlays",
+            side_effect=RuntimeError("control-plane request failed (503): busy"),
+        ),
+    ):
+        assert main() == 1
+
+    assert request.call_count == 1
 
 
 def test_worst_case_stderr_report_fits_callback_budget_and_records_success(
@@ -296,6 +402,7 @@ def test_worst_case_stderr_report_fits_callback_budget_and_records_success(
     with (
         patch("scripts.run_control_plane_job.api_request", side_effect=control_plane_request),
         patch("scripts.run_control_plane_job.execute_submission", return_value=report),
+        patch("scripts.run_control_plane_job.upload_prediction_overlays"),
     ):
         assert main() == 0
 

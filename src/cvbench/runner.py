@@ -28,6 +28,7 @@ from .evidence import generate_evidence_packets
 from .matching import match_records_by_support
 from .metrics import calculate_metrics
 from .model import CollectedRecord, RunArtifacts, RuntimeOutcome, Scenario
+from .prediction_overlay import write_prediction_overlays
 from .protocol import send_message
 from .reporting import write_report_files
 from .resources import ResourceMonitor, unavailable_resource_summary
@@ -964,6 +965,12 @@ def run_benchmark(benchmark_path: str | Path, system_path: str | Path, output_ro
         baseline = json.loads(benchmark.baseline_report.read_text())
         report["comparison"] = compare_reports(baseline, report)
     report_json, report_html = write_report_files(run_dir, report)
+    write_prediction_overlays(
+        run_dir / "prediction-overlays",
+        scenarios,
+        scored_collected,
+        sequence_timestamps,
+    )
     if benchmark.reporting["generate_failure_packets"]:
         generate_evidence_packets(
             run_dir, findings, scenarios, ground_truth, collected, matches, resources_csv, command

@@ -6,6 +6,8 @@ import TIMING_COMPUTE_SCHEMA from "../../schemas/timing-compute-v1.schema.json" 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const MAX_SUBMISSION_BYTES = 16 * 1024;
 const MAX_RESULT_BYTES = 1024 * 1024;
+const MAX_PREDICTION_OVERLAY_BYTES = 1536 * 1024;
+const MAX_PREDICTION_OVERLAY_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_OPERATOR_NOTE_BYTES = 8 * 1024;
 const VALID_JOB_STATUSES = new Set(["queued", "running", "succeeded", "failed"]);
 const IMAGE_PATTERN = /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?\/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/;
@@ -68,6 +70,7 @@ export function createApp(options) {
     operatorAdjudicatorCredentials: credentialScopesAreValid ? operatorAdjudicatorCredentials : [],
     maxSubmissionsPerHour: boundedInteger(options.maxSubmissionsPerHour, 20, 1, 1000),
     leaseSeconds: boundedInteger(options.leaseSeconds, 3000, 60, 7200),
+    predictionOverlaysRequired: options.predictionOverlaysRequired !== false,
   };
 
   return {
@@ -143,6 +146,24 @@ async function route(request, config) {
     return submission ? json(publicSubmission(submission)) : problem(404, "not_found", "Submission not found.");
   }
 
+  const publicOverlayMatch = url.pathname.match(/^\/api\/v1\/submissions\/([^/]+)\/prediction-overlays\/([^/]+)$/);
+  if (request.method === "GET" && publicOverlayMatch) {
+    const [id, scenarioId] = publicOverlayMatch.slice(1);
+    if (!ID_PATTERN.test(id) || !PUBLIC_BENCHMARK.scenario_ids.includes(scenarioId)) {
+      return problem(404, "not_found", "Prediction overlay not found.");
+    }
+    const overlay = await config.store.getPredictionOverlay(id, scenarioId);
+    if (!overlay) return problem(404, "prediction_overlay_unavailable", "Model playback is unavailable for this run.");
+    const etag = `"${overlay.sha256}"`;
+    const headers = {
+      "cache-control": "public, max-age=31556952, immutable",
+      etag,
+      "x-content-type-options": "nosniff",
+    };
+    if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
+    return json(overlay.payload, 200, headers);
+  }
+
   if (request.method === "POST" && url.pathname === "/api/v1/internal/leases") {
     if (!(await authorized(bearerToken(request), [config.runnerToken]))) return unauthorized("runner token");
     const leaseToken = randomToken();
@@ -151,6 +172,7 @@ async function route(request, config) {
       now,
       leaseExpiresAt: now + config.leaseSeconds,
       leaseTokenHash: await sha256(leaseToken),
+      predictionOverlaysRequired: config.predictionOverlaysRequired,
     });
     if (!submission) return new Response(null, { status: 204 });
     return json({
@@ -162,6 +184,71 @@ async function route(request, config) {
         max_result_bytes: MAX_RESULT_BYTES,
       },
     });
+  }
+
+  const overlayMatch = url.pathname.match(/^\/api\/v1\/internal\/submissions\/([^/]+)\/prediction-overlays\/([^/]+)$/);
+  if (request.method === "PUT" && overlayMatch) {
+    if (!(await authorized(bearerToken(request), [config.runnerToken]))) return unauthorized("runner token");
+    const [id, scenarioId] = overlayMatch.slice(1);
+    if (!ID_PATTERN.test(id) || !PUBLIC_BENCHMARK.scenario_ids.includes(scenarioId)) {
+      return problem(404, "not_found", "Submission or scenario not found.");
+    }
+    const leaseToken = request.headers.get("x-cvbench-lease-token") || "";
+    if (!/^[a-f0-9]{64}$/.test(leaseToken)) return problem(409, "invalid_transition", "A valid live lease token is required.");
+    const parsed = await readJson(request, MAX_PREDICTION_OVERLAY_BYTES);
+    if (parsed.error) return parsed.error;
+    const validation = validatePredictionOverlay(parsed.value, scenarioId);
+    if (validation.error) return problem(422, "invalid_prediction_overlay", validation.error);
+    const payloadJson = canonicalJson(validation.value);
+    const staged = await config.store.stagePredictionOverlay({
+      id,
+      leaseTokenHash: await sha256(leaseToken),
+      scenarioId,
+      payloadJson,
+      payloadSha256: await sha256(payloadJson),
+      byteCount: new TextEncoder().encode(payloadJson).byteLength,
+      predictionCount: validation.value.summary.prediction_count,
+      now: unixTime(),
+    });
+    if (staged.kind === "conflict") return problem(409, "artifact_conflict", "This scenario already has different staged content.");
+    if (staged.kind === "invalid_transition") return problem(409, "invalid_transition", "The job is not running or the lease is stale.");
+    return json({ status: staged.kind, scenario_id: scenarioId }, staged.kind === "created" ? 201 : 200);
+  }
+
+  const sealMatch = url.pathname.match(/^\/api\/v1\/internal\/submissions\/([^/]+)\/prediction-overlays\/complete$/);
+  if (request.method === "POST" && sealMatch) {
+    if (!(await authorized(bearerToken(request), [config.runnerToken]))) return unauthorized("runner token");
+    if (!ID_PATTERN.test(sealMatch[1])) return problem(404, "not_found", "Submission not found.");
+    const parsed = await readJson(request, 1024);
+    if (parsed.error) return parsed.error;
+    if (!isObject(parsed.value) || unknownKeys(parsed.value, ["lease_token"]).length || !/^[a-f0-9]{64}$/.test(parsed.value.lease_token || "")) {
+      return problem(422, "invalid_prediction_overlay_set", "lease_token is required.");
+    }
+    const leaseTokenHash = await sha256(parsed.value.lease_token);
+    const staged = await config.store.stagedPredictionOverlays({ id: sealMatch[1], leaseTokenHash, now: unixTime() });
+    if (!staged) return problem(409, "invalid_transition", "The job is not running or the lease is stale.");
+    const expected = [...PUBLIC_BENCHMARK.scenario_ids].sort();
+    const actual = staged.rows.map((row) => row.scenario_id);
+    if (canonicalJson(actual) !== canonicalJson(expected)) {
+      return problem(422, "incomplete_prediction_overlay_set", "Every assigned public scenario must be staged exactly once.");
+    }
+    if (staged.rows.reduce((total, row) => total + row.byte_count, 0) > MAX_PREDICTION_OVERLAY_TOTAL_BYTES) {
+      return problem(422, "prediction_overlay_budget_exceeded", "The prediction overlay set exceeds its public storage budget.");
+    }
+    const rootSha256 = await sha256(canonicalJson(staged.rows.map((row) => ({
+      scenario_id: row.scenario_id,
+      sha256: row.payload_sha256,
+    }))));
+    const sealed = await config.store.sealPredictionOverlays({
+      id: sealMatch[1],
+      attempt: staged.attempt,
+      leaseTokenHash,
+      rootSha256,
+      now: unixTime(),
+    });
+    if (sealed.kind === "conflict") return problem(409, "artifact_conflict", "This attempt already sealed different overlays.");
+    if (sealed.kind === "invalid_transition") return problem(409, "invalid_transition", "The job is not running or the lease is stale.");
+    return json({ status: sealed.kind, root_sha256: rootSha256 }, sealed.kind === "created" ? 201 : 200);
   }
 
   const resultMatch = url.pathname.match(/^\/api\/v1\/internal\/submissions\/([^/]+)\/result$/);
@@ -519,7 +606,7 @@ function publicSubmission(value) {
     model: { name: value.name, version: value.modelVersion, image: value.image, argv: value.argv },
     benchmark: PUBLIC_BENCHMARK,
     attempt: value.attempt,
-    result: publicResultSummary(value.result),
+    result: publicResultSummary(value.result, value),
     error: value.error,
     created_at: iso(value.createdAt),
     updated_at: iso(value.updatedAt),
@@ -678,7 +765,7 @@ function scoreSummary(report) {
   };
 }
 
-function publicResultSummary(report) {
+function publicResultSummary(report, submission = null) {
   if (!report) return null;
   return {
     outcome: report.outcome ? { status: report.outcome.status, exit_code: report.outcome.exit_code ?? null } : null,
@@ -687,6 +774,14 @@ function publicResultSummary(report) {
     findings: Array.isArray(report.findings)
       ? report.findings.map((finding) => ({ finding_id: finding.finding_id, category: finding.category, severity: finding.severity, statement: finding.interpretation?.statement || null }))
       : [],
+    prediction_overlay: submission?.predictionOverlayRootSha256
+      ? {
+          state: "complete",
+          schema_version: "cvbench.prediction-overlay/v1",
+          scenario_url_template: `/api/v1/submissions/${submission.id}/prediction-overlays/{scenario_id}`,
+          root_sha256: submission.predictionOverlayRootSha256,
+        }
+      : { state: "unavailable", reason: "This run predates public model-playback retention." },
     provenance: {
       comparison_fingerprint: report.provenance?.comparison_fingerprint || null,
       resolved_container_image: report.provenance?.resolved_container_image || null,
@@ -697,6 +792,65 @@ function publicResultSummary(report) {
       leaderboard_class: report.provenance?.leaderboard_class || null,
     },
   };
+}
+
+function validatePredictionOverlay(value, expectedScenarioId) {
+  if (!isObject(value)) return { error: "Overlay must be a JSON object." };
+  const allowed = ["schema_version", "state", "reason", "scenario_id", "width", "height", "frame_count", "frames", "summary"];
+  if (unknownKeys(value, allowed).length) return { error: "Overlay contains unsupported fields." };
+  if (value.schema_version !== "cvbench.prediction-overlay/v1" || value.scenario_id !== expectedScenarioId) {
+    return { error: "Overlay schema or scenario does not match the upload URL." };
+  }
+  if (!["complete", "unavailable"].includes(value.state)) return { error: "Overlay state is invalid." };
+  if (!Number.isInteger(value.width) || value.width < 1 || value.width > 8192
+    || !Number.isInteger(value.height) || value.height < 1 || value.height > 8192
+    || !Number.isInteger(value.frame_count) || value.frame_count < 1 || value.frame_count > 10000
+    || !Array.isArray(value.frames) || !isObject(value.summary)
+    || unknownKeys(value.summary, ["prediction_count"]).length
+    || !Number.isInteger(value.summary.prediction_count) || value.summary.prediction_count < 0
+    || value.summary.prediction_count > 8192) {
+    return { error: "Overlay dimensions, frame count, or summary are invalid." };
+  }
+  if (value.state === "unavailable") {
+    if (value.reason !== "budget_exceeded" || value.frames.length !== 0 || value.summary.prediction_count !== 0) {
+      return { error: "Unavailable overlays must identify the supported reason and contain no frames." };
+    }
+    return { value };
+  }
+  if (value.reason !== undefined || value.frames.length !== value.frame_count) return { error: "Complete overlays must contain every frame." };
+  let predictionCount = 0;
+  for (let index = 0; index < value.frames.length; index += 1) {
+    const frame = value.frames[index];
+    if (!isObject(frame) || unknownKeys(frame, ["frame_index", "source_timestamp_ns", "objects"]).length
+      || frame.frame_index !== index || !Number.isInteger(frame.source_timestamp_ns) || frame.source_timestamp_ns < 0
+      || !Array.isArray(frame.objects) || frame.objects.length > 128) {
+      return { error: "Overlay frames must be contiguous, timestamped, and bounded." };
+    }
+    const labels = new Set();
+    for (const object of frame.objects) {
+      if (!validPredictionObject(object, value.width, value.height) || labels.has(object.track_label)) {
+        return { error: "Overlay prediction objects are invalid or duplicated." };
+      }
+      labels.add(object.track_label);
+      predictionCount += 1;
+    }
+  }
+  if (predictionCount !== value.summary.prediction_count) return { error: "Overlay prediction count does not match its frames." };
+  return { value };
+}
+
+function validPredictionObject(value, width, height) {
+  if (!isObject(value) || unknownKeys(value, ["track_label", "class_id", "event", "state", "support", "confidence", "bbox_xyxy"]).length) return false;
+  if (!/^track-[0-9]{3,4}$/.test(value.track_label)
+    || !["synthetic_target", "person", "vehicle", "dog", "other"].includes(value.class_id)
+    || !["track_started", "track_update", "track_reacquired"].includes(value.event)
+    || !["tentative", "confirmed", "coasting", "reacquired", "lost"].includes(value.state)
+    || !["observed", "predicted"].includes(value.support)
+    || typeof value.confidence !== "number" || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1
+    || !Array.isArray(value.bbox_xyxy) || value.bbox_xyxy.length !== 4
+    || value.bbox_xyxy.some((coordinate) => typeof coordinate !== "number" || !Number.isFinite(coordinate))) return false;
+  const [x1, y1, x2, y2] = value.bbox_xyxy;
+  return 0 <= x1 && x1 < x2 && x2 <= width && 0 <= y1 && y1 < y2 && y2 <= height;
 }
 
 function validateOperatorNote(value) {
@@ -953,6 +1107,7 @@ export const CONTRACT = {
     accepted: ["image", "argv", "name", "model_version", "contact", "notes"],
     rejected: ["source repositories", "build instructions", "shell command strings", "Docker socket access", "custom environment variables", "replay or pacing overrides"],
     authentication: "Bearer submission API key plus a unique Idempotency-Key header.",
+    public_playback: "Successful new runs publish a bounded, sanitized visualization projection of submitted track geometry. Raw identifiers, raw output records, diagnostics, and private runner timing are not included.",
     terminology: "The submitted object is a complete system image. One linux/amd64 OCI image is a packaging, reproducibility, and security boundary, not a one-learned-model or one-process assumption.",
     compatibility_names: {
       model_version: "Version 1 wire/storage field retained for compatibility; it means system version.",
@@ -1005,6 +1160,19 @@ export const OPENAPI = {
             },
           },
           404: { description: "Not found" },
+        },
+      },
+    },
+    "/api/v1/submissions/{id}/prediction-overlays/{scenario_id}": {
+      get: {
+        operationId: "getPredictionOverlay",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "scenario_id", in: "path", required: true, schema: { type: "string", enum: PUBLIC_BENCHMARK.scenario_ids } },
+        ],
+        responses: {
+          200: { description: "Sanitized, frame-locked submitted-system track projection" },
+          404: { description: "Run or retained overlay unavailable" },
         },
       },
     },

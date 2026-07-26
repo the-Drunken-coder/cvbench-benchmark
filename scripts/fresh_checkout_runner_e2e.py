@@ -48,6 +48,8 @@ RUNNER_TOKEN = "runner-token-for-local-fresh-checkout-e2e"
 class ControlPlaneHandler(BaseHTTPRequestHandler):
     callback: dict[str, Any] | None = None
     image: str = ""
+    overlays: dict[str, dict[str, Any]] = {}
+    overlays_sealed = False
 
     def log_message(self, _format: str, *_args: object) -> None:
         return
@@ -93,6 +95,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             callback = json.loads(self.rfile.read(length))
             report = callback.get("report")
             try:
+                if not self.overlays_sealed:
+                    raise ValueError("prediction overlays were not sealed")
                 validate_report(report)
                 if report["outcome"]["resolved_image"] != self.image:
                     raise ValueError("callback image does not match lease")
@@ -104,7 +108,42 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self.__class__.callback = callback
             self._json(200, {"accepted": True})
             return
+        if self.path == f"/api/v1/internal/submissions/{SUBMISSION_ID}/prediction-overlays/complete":
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length))
+            if body != {"lease_token": LEASE_TOKEN} or set(self.overlays) != PUBLIC_SCENARIO_IDS:
+                self._json(422, {"error": "prediction overlay set is incomplete or has the wrong lease"})
+                return
+            self.__class__.overlays_sealed = True
+            self._json(201, {"status": "created"})
+            return
         self._json(404, {"error": "not found"})
+
+    def do_PUT(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        prefix = f"/api/v1/internal/submissions/{SUBMISSION_ID}/prediction-overlays/"
+        if self.headers.get("Authorization") != f"Bearer {RUNNER_TOKEN}":
+            self._json(401, {"error": "unauthorized"})
+            return
+        if self.headers.get("X-CVBench-Lease-Token") != LEASE_TOKEN or not self.path.startswith(prefix):
+            self._json(409, {"error": "invalid lease or path"})
+            return
+        scenario_id = self.path.removeprefix(prefix)
+        if scenario_id not in PUBLIC_SCENARIO_IDS or scenario_id in self.overlays:
+            self._json(409, {"error": "invalid or duplicate scenario"})
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        overlay = json.loads(self.rfile.read(length))
+        if (
+            overlay.get("schema_version") != "cvbench.prediction-overlay/v1"
+            or overlay.get("scenario_id") != scenario_id
+            or overlay.get("state") not in {"complete", "unavailable"}
+            or not isinstance(overlay.get("frames"), list)
+            or not isinstance(overlay.get("summary", {}).get("prediction_count"), int)
+        ):
+            self._json(422, {"error": "invalid prediction overlay"})
+            return
+        self.__class__.overlays[scenario_id] = overlay
+        self._json(201, {"status": "created"})
 
 
 def assert_callback(callback: dict[str, Any] | None) -> None:
@@ -141,6 +180,8 @@ def main() -> int:
 
     ControlPlaneHandler.image = args.image
     ControlPlaneHandler.callback = None
+    ControlPlaneHandler.overlays = {}
+    ControlPlaneHandler.overlays_sealed = False
     server = ThreadingHTTPServer(("127.0.0.1", 0), ControlPlaneHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

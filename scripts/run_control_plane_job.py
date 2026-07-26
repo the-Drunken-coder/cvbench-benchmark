@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -79,6 +80,8 @@ def api_request(
     path: str,
     *,
     body: dict[str, Any] | None = None,
+    method: str = "POST",
+    headers: dict[str, str] | None = None,
 ) -> tuple[int, dict[str, Any] | None]:
     url = f"{base_url.rstrip('/')}{path}"
     parsed = urllib.parse.urlparse(url)
@@ -88,8 +91,9 @@ def api_request(
     request = urllib.request.Request(
         url,
         data=payload or b"",
-        method="POST",
+        method=method,
         headers={
+            **(headers or {}),
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "User-Agent": "cvbench-trusted-runner/1",
@@ -103,6 +107,21 @@ def api_request(
         content = exc.read()
         detail = content.decode(errors="replace")[:1000]
         raise RuntimeError(f"control-plane request failed ({exc.code}): {detail}") from exc
+
+
+def retry_api_request(*args: Any, **kwargs: Any) -> tuple[int, dict[str, Any] | None]:
+    for attempt in range(3):
+        try:
+            return api_request(*args, **kwargs)
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 2:
+                raise
+            time.sleep(2**attempt)
+        except RuntimeError as exc:
+            if attempt == 2 or not re.search(r"control-plane request failed \((?:429|5\d\d)\)", str(exc)):
+                raise
+            time.sleep(2**attempt)
+    raise AssertionError("unreachable")
 
 
 def validate_lease(lease: dict[str, Any]) -> tuple[dict[str, Any], str, int]:
@@ -372,6 +391,37 @@ def callback_path(submission_id: str) -> str:
     return f"/api/v1/internal/submissions/{submission_id}/result"
 
 
+def upload_prediction_overlays(
+    base_url: str,
+    runner_token: str,
+    submission_id: str,
+    lease_token: str,
+    work: Path,
+) -> None:
+    overlay_dirs = list((work / "runs").glob("*/prediction-overlays"))
+    if len(overlay_dirs) != 1:
+        raise RuntimeError(f"expected exactly one prediction overlay directory, found {len(overlay_dirs)}")
+    paths = sorted(overlay_dirs[0].glob("*.json"))
+    if {path.stem for path in paths} != PUBLIC_SCENARIO_IDS:
+        raise RuntimeError("prediction overlay set does not match the assigned public suite")
+    for path in paths:
+        payload = json.loads(path.read_text())
+        retry_api_request(
+            base_url,
+            runner_token,
+            f"/api/v1/internal/submissions/{submission_id}/prediction-overlays/{path.stem}",
+            body=payload,
+            method="PUT",
+            headers={"X-CVBench-Lease-Token": lease_token},
+        )
+    retry_api_request(
+        base_url,
+        runner_token,
+        f"/api/v1/internal/submissions/{submission_id}/prediction-overlays/complete",
+        body={"lease_token": lease_token},
+    )
+
+
 def main() -> int:
     base_url = os.environ.get("CVBENCH_API_BASE_URL", "").strip()
     runner_token = os.environ.get("CVBENCH_RUNNER_TOKEN", "").strip()
@@ -386,23 +436,39 @@ def main() -> int:
     submission, lease_token, max_result_bytes = validate_lease(lease)
     path = callback_path(submission["id"])
     repository = Path(__file__).resolve().parent.parent
-    try:
-        with tempfile.TemporaryDirectory(prefix="cvbench-job-") as temporary:
-            report = execute_submission(repository, submission, Path(temporary))
-        success_body = build_success_callback(report, lease_token, max_result_bytes)
-    except Exception as exc:
-        error = f"{type(exc).__name__}: {exc}"[:2000]
+    with tempfile.TemporaryDirectory(prefix="cvbench-job-") as temporary:
         try:
-            api_request(
+            temporary_path = Path(temporary)
+            report = execute_submission(repository, submission, temporary_path)
+            success_body = build_success_callback(report, lease_token, max_result_bytes)
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"[:2000]
+            try:
+                api_request(
+                    base_url,
+                    runner_token,
+                    path,
+                    body={"status": "failed", "lease_token": lease_token, "error": error},
+                )
+            except Exception as callback_error:
+                print(f"Result callback also failed: {callback_error}", file=sys.stderr)
+            print(f"CVBench submission {submission['id']} failed: {error}", file=sys.stderr)
+            return 1
+        try:
+            upload_prediction_overlays(
                 base_url,
                 runner_token,
-                path,
-                body={"status": "failed", "lease_token": lease_token, "error": error},
+                submission["id"],
+                lease_token,
+                temporary_path,
             )
-        except Exception as callback_error:
-            print(f"Result callback also failed: {callback_error}", file=sys.stderr)
-        print(f"CVBench submission {submission['id']} failed: {error}", file=sys.stderr)
-        return 1
+        except Exception as publication_error:
+            print(
+                f"Prediction overlay publication for CVBench submission {submission['id']} failed; "
+                f"the lease will retry without recording a system failure: {publication_error}",
+                file=sys.stderr,
+            )
+            return 1
     try:
         api_request(base_url, runner_token, path, body=success_body)
     except Exception as exc:

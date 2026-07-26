@@ -57,6 +57,40 @@ await assertStatus(leaseResponse, 200, "lease");
 const leased = await leaseResponse.json();
 assert(leased.submission.id === created.id, "leased a different submission");
 
+for (const scenarioId of leased.submission.benchmark.scenario_ids) {
+  const overlayResponse = await fetch(
+    `${baseUrl}/api/v1/internal/submissions/${created.id}/prediction-overlays/${scenarioId}`,
+    {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${runnerToken}`,
+        "content-type": "application/json",
+        "x-cvbench-lease-token": leased.lease.token,
+      },
+      body: JSON.stringify({
+        schema_version: "cvbench.prediction-overlay/v1",
+        state: "complete",
+        scenario_id: scenarioId,
+        width: 1,
+        height: 1,
+        frame_count: 1,
+        frames: [{ frame_index: 0, source_timestamp_ns: 0, objects: [] }],
+        summary: { prediction_count: 0 },
+      }),
+    },
+  );
+  await assertStatus(overlayResponse, 201, `overlay ${scenarioId}`);
+}
+const sealResponse = await fetch(
+  `${baseUrl}/api/v1/internal/submissions/${created.id}/prediction-overlays/complete`,
+  {
+    method: "POST",
+    headers: { authorization: `Bearer ${runnerToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ lease_token: leased.lease.token }),
+  },
+);
+await assertStatus(sealResponse, 201, "overlay seal");
+
 const callbackResponse = await fetch(`${baseUrl}/api/v1/internal/submissions/${created.id}/result`, {
   method: "POST",
   headers: { authorization: `Bearer ${runnerToken}`, "content-type": "application/json" },
