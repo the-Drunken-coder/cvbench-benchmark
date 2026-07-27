@@ -18,16 +18,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: cvbench-example-lite-mot
-            dockerfile: examples/Dockerfile.lite-mot
-          - image: cvbench-example-balanced-mot
-            dockerfile: examples/Dockerfile.balanced-mot
-          - image: cvbench-example-advanced-mot
-            dockerfile: examples/Dockerfile.advanced-mot
+          - image: cvbench-example-yolox-x
+            dockerfile: examples/Dockerfile.yolox-x-v3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: refs/heads/main
+          ref: ${{ github.ref }}
           persist-credentials: false
 
       - name: Sign in to GitHub Container Registry
@@ -43,7 +39,7 @@ jobs:
             --platform linux/amd64 \
             --file "${{ matrix.dockerfile }}" \
             --tag "${image}:${short_sha}" \
-            --tag "${image}:v1" \
+            --tag "${image}:v3-test" \
             --push \
             .
 
@@ -51,4 +47,4 @@ jobs:
         run: |
           docker logout ghcr.io
           docker manifest inspect \
-            "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}:v1"
+            "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}:v3-test"

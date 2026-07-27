@@ -1,0 +1,19 @@
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS weights
+ADD --checksum=sha256:c892d7aaf1c4746d8a4d675bec669a4db4f434b4ee1efb654bc9b353379c7c55 \
+    https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_x.onnx \
+    /yolox_x.onnx
+
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+WORKDIR /app
+COPY pyproject.toml README.md LICENSE /app/
+COPY src /app/src
+COPY schemas /app/schemas
+RUN pip install --no-cache-dir "opencv-python-headless==4.13.0.92" .
+COPY --from=weights /yolox_x.onnx /app/models/yolox_x.onnx
+RUN chmod 0555 /app/models \
+    && chmod 0444 /app/models/yolox_x.onnx \
+    && groupadd --system cvbench \
+    && useradd --system --gid cvbench --home-dir /nonexistent cvbench
+ENV CVBENCH_MODEL_PATH=/app/models/yolox_x.onnx
+USER cvbench
+CMD ["python", "-m", "cvbench.examples.advanced_mot"]
