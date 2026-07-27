@@ -527,7 +527,9 @@
       "properties": {
         "cpu_limit": {"type": ["number", "null"], "exclusiveMinimum": 0},
         "memory_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
-        "network_access": {"type": "boolean"}
+        "network_access": {"type": "boolean"},
+        "memory_swap_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "pids_limit": {"type": ["integer", "null"], "minimum": 1}
       }
     },
     "isolationApplied": {
@@ -536,7 +538,9 @@
       "required": ["cpu_limit", "memory_limit_mb"],
       "properties": {
         "cpu_limit": {"type": ["number", "null"], "exclusiveMinimum": 0},
-        "memory_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0}
+        "memory_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "memory_swap_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "pids_limit": {"type": ["integer", "null"], "minimum": 1}
       }
     },
     "imageIdentity": {

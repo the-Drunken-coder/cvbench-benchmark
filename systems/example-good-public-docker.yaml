@@ -1,19 +1,19 @@
 schema_version: cvbench.system/v1
-id: cvbench-lite-mot
-revision: yolox-nano-byte-association-v1
+id: example-good-public
+revision: "1.0.0"
 
 runtime:
   type: docker
-  image: cvbench-example-lite-mot:v1
-  command: ["python", "-m", "cvbench.examples.lite_mot"]
+  image: cvbench-example-good:v1
+  command: ["python", "-m", "cvbench.examples.good_tracker"]
 
 readiness:
   type: stdout_pattern
   pattern: CVBENCH_READY
-  timeout_seconds: 30
+  timeout_seconds: 10
 
 shutdown:
-  grace_period_seconds: 5
+  grace_period_seconds: 2
 
 resources:
   cpu_limit: 4

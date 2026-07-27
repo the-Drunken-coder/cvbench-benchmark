@@ -23,6 +23,7 @@ CONTROL_PLANE_JOB_ID_PATTERN = re.compile(
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 ACCOUNTING_CGROUP_NAME_PATTERN = re.compile(r"cvbench-[0-9A-Za-z.-]{1,120}(?:\.slice)?")
 RETENTION_CGROUP_NAME = "cvbench-retain"
+DOCKER_PIDS_LIMIT = 512
 
 
 @dataclass
@@ -48,12 +49,15 @@ class ResolvedImage:
 
 def not_started_isolation(config: SystemConfig, error: str) -> dict[str, object]:
     """Describe requested isolation without claiming that any runtime fact was observed."""
+    memory_limit = config.resources.get("memory_limit_mb")
     return {
         "runtime": config.runtime_type,
         "requested": {
             "cpu_limit": config.resources.get("cpu_limit"),
-            "memory_limit_mb": config.resources.get("memory_limit_mb"),
+            "memory_limit_mb": memory_limit,
             "network_access": config.resources.get("network_access", False),
+            "memory_swap_limit_mb": memory_limit if config.runtime_type == "docker" else None,
+            "pids_limit": DOCKER_PIDS_LIMIT if config.runtime_type == "docker" else None,
         },
         "status": "not_started",
         "future_frame_isolation": None,
@@ -209,7 +213,15 @@ def start_runtime(config: SystemConfig, socket_dir: Path, run_dir: Path) -> Star
         if cpu_limit:
             command.extend(["--cpus", str(cpu_limit)])
         if memory_limit:
-            command.extend(["--memory", f"{memory_limit}m"])
+            command.extend(
+                [
+                    "--memory",
+                    f"{memory_limit}m",
+                    "--memory-swap",
+                    f"{memory_limit}m",
+                ]
+            )
+        command.extend(["--pids-limit", str(DOCKER_PIDS_LIMIT)])
         control_plane_job_id = os.environ.get("CVBENCH_DOCKER_JOB_ID")
         if control_plane_job_id:
             if not CONTROL_PLANE_JOB_ID_PATTERN.fullmatch(control_plane_job_id):
@@ -238,6 +250,10 @@ def start_runtime(config: SystemConfig, socket_dir: Path, run_dir: Path) -> Star
             "cpu_limit": config.resources.get("cpu_limit"),
             "memory_limit_mb": config.resources.get("memory_limit_mb"),
             "network_access": config.resources.get("network_access", False),
+            "memory_swap_limit_mb": (
+                config.resources.get("memory_limit_mb") if config.runtime_type == "docker" else None
+            ),
+            "pids_limit": DOCKER_PIDS_LIMIT if config.runtime_type == "docker" else None,
         },
         "status": "not_enforced_local" if config.runtime_type == "local" else "pending_verification",
         "future_frame_isolation": None,
@@ -399,6 +415,7 @@ def verify_docker_isolation(runtime: StartedRuntime, socket_dir: Path, timeout: 
     expected_memory = requested.get("memory_limit_mb")
     cpu_applied = _scaled_number(host.get("NanoCpus"), 1_000_000_000)
     memory_applied = _scaled_number(host.get("Memory"), 1024 * 1024)
+    memory_swap_applied = _scaled_number(host.get("MemorySwap"), 1024 * 1024)
     executed_image_id = inspected.get("Image")
     executed_reference = container_config.get("Image")
     executed_user = container_config.get("User")
@@ -417,8 +434,16 @@ def verify_docker_isolation(runtime: StartedRuntime, socket_dir: Path, timeout: 
     )
     mount_ok = expected_mount_ok and mount_pairs == [expected_mount]
     network_ok = host.get("NetworkMode") == "none"
-    limits_ok = (expected_cpu is None or float(expected_cpu) == cpu_applied) and (
-        expected_memory is None or float(expected_memory) == memory_applied
+    limits_ok = (
+        (expected_cpu is None or float(expected_cpu) == cpu_applied)
+        and (
+            expected_memory is None
+            or (
+                float(expected_memory) == memory_applied
+                and float(expected_memory) == memory_swap_applied
+            )
+        )
+        and host.get("PidsLimit") == DOCKER_PIDS_LIMIT
     )
     if not (mount_ok and network_ok and limits_ok and identity_ok and user_ok):
         return _verification_failed(runtime, "Docker isolation inspection did not satisfy every required claim")
@@ -434,7 +459,12 @@ def verify_docker_isolation(runtime: StartedRuntime, socket_dir: Path, timeout: 
             "container_id": container_id,
             "mounts": mount_pairs,
             "network_mode": host.get("NetworkMode"),
-            "applied": {"cpu_limit": cpu_applied, "memory_limit_mb": memory_applied},
+            "applied": {
+                "cpu_limit": cpu_applied,
+                "memory_limit_mb": memory_applied,
+                "memory_swap_limit_mb": memory_swap_applied,
+                "pids_limit": host.get("PidsLimit"),
+            },
             "future_frame_isolation": mount_ok and network_ok,
             "ground_truth_access": not (mount_ok and network_ok),
             "repository_access": not (mount_ok and network_ok),

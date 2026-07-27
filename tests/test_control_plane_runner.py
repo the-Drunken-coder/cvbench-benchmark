@@ -18,10 +18,13 @@ from scripts.run_control_plane_job import (
     PUBLIC_BENCHMARK_ID,
     PUBLIC_BENCHMARK_MANIFEST,
     PUBLIC_BENCHMARK_VERSION,
+    PUBLIC_CONTAINER_GUARDS,
     PUBLIC_DELIVERY_POLICY,
     PUBLIC_LEADERBOARD_POLICY,
     PUBLIC_REPLAY_PROFILE,
     PUBLIC_REPLAY_RATE,
+    PUBLIC_RESOURCES,
+    PUBLIC_RUN_BUDGETS,
     PUBLIC_SCENARIO_IDS,
     PUBLIC_TIMING_COMPUTE_CONTRACT,
     SECRET_ENVIRONMENT_KEYS,
@@ -49,6 +52,9 @@ BENCHMARK = {
     "replay_profile": PUBLIC_REPLAY_PROFILE,
     "replay_rate": PUBLIC_REPLAY_RATE,
     "leaderboard_policy": PUBLIC_LEADERBOARD_POLICY,
+    "resources": PUBLIC_RESOURCES,
+    "container_guards": PUBLIC_CONTAINER_GUARDS,
+    "run_budgets": PUBLIC_RUN_BUDGETS,
 }
 
 
@@ -195,6 +201,9 @@ def test_validate_lease_revalidates_untrusted_control_plane_data() -> None:
         ("replay_profile", "half-speed"),
         ("replay_rate", 0.5),
         ("leaderboard_policy", "other"),
+        ("resources", {**PUBLIC_RESOURCES, "memory_limit_mb": 2048}),
+        ("container_guards", {**PUBLIC_CONTAINER_GUARDS, "pids_limit": 1024}),
+        ("run_budgets", {**PUBLIC_RUN_BUDGETS, "max_run_seconds": 90}),
     ):
         with pytest.raises(ValueError, match="benchmark assignment"):
             validate_lease(
@@ -227,7 +236,7 @@ def test_generated_system_config_preserves_argv_without_a_shell(tmp_path: Path) 
         "image": IMAGE,
         "command": ["python", "-m", "tracker", "--threshold=0.7"],
     }
-    assert config["resources"] == {"cpu_limit": 4, "memory_limit_mb": 2048, "network_access": False}
+    assert config["resources"] == PUBLIC_RESOURCES
 
 
 def test_callback_path_and_secret_scrubbing(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -57,7 +57,7 @@ def test_combined_report_rejects_duplicate_scenario_even_when_set_is_complete(
     run.mkdir(parents=True)
     report = {
         "outcome": {"status": "completed"},
-        "benchmark": {"id": "public-whole-system-tracking", "version": "2.0.0"},
+        "benchmark": {"id": "public-whole-system-tracking", "version": "3.0.0"},
         "metrics": {
             "sample_counts": {"matches": 1},
             "multi_object_tracking": {"hota": 0},

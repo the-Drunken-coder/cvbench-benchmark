@@ -13,7 +13,7 @@ Build and run:
 
 ```bash
 docker build -f examples/Dockerfile.balanced-mot -t cvbench-example-balanced-mot:v1 .
-cvbench run --benchmark benchmarks/public-whole-system-v2.yaml \
+cvbench run --benchmark benchmarks/public-whole-system-v3.yaml \
   --system systems/example-balanced-mot-docker.yaml --output runs/
 ```
 

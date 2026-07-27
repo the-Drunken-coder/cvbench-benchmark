@@ -126,6 +126,7 @@ code, pre { font-family: var(--mono); }
 .result-axes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem 1rem; margin: 1rem 0; padding: 1rem 0; border-block: 1px solid var(--line); }
 .result-axes dt { font: 700 .62rem var(--mono); text-transform: uppercase; color: var(--muted); }
 .result-axes dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
+.benchmark-comparison-note { max-width: 70ch; color: var(--muted); }
 .status-pill { display: inline-block; padding: .3rem .6rem; background: var(--acid); font: 700 .7rem var(--mono); text-transform: uppercase; }
 .status-pill.status-running, .status-pill.status-queued { background: #fff2a8; }
 .status-pill.status-failed { background: #ffd0c8; }

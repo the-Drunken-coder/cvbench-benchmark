@@ -48,7 +48,7 @@ Preparation preserves all 150 consecutive source frames per scenario and the exa
 
 ## Scoring and execution
 
-`benchmarks/real-video-v2.yaml` scores the isolated real tranche. `benchmarks/public-whole-system-v2.yaml` is the versioned public submission suite and contains all 13 synthetic scenarios plus these three real scenarios. Public v1 API submissions do not choose a hidden or different suite: the queued record, lease, report, catalog, contract, and OpenAPI identify `public-whole-system-tracking` version `2.0.0` and its 16 scenario IDs.
+`benchmarks/real-video-v2.yaml` scores the isolated real tranche. `benchmarks/public-whole-system-v3.yaml` is the active public submission suite and contains all 13 synthetic scenarios plus these three real scenarios. Public v1 API submissions do not choose a hidden or different suite: the queued record, lease, report, catalog, contract, and OpenAPI identify `public-whole-system-tracking` version `3.0.0` and its 16 scenario IDs. The inactive Version 2 manifest remains in the repository solely to reproduce historical reports.
 
 Real-video scoring is class-aware and full-frame. HOTA is reported across IoU thresholds 0.05–0.95 and IDF1 uses class-aware IoU 0.5 identity matching. Reports also retain misses, false detections and tracks, ID switches, fragmentation, completeness/coverage, duplicate tracks, localization, latency, resource use, and isolation evidence. There is no target-first or ignore matching in the real scenarios because every supported mover is scoreable.
 

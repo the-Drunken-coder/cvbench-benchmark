@@ -43,7 +43,10 @@ test("health and machine-readable metadata are public", async () => {
   assert.match(contract.container.filesystem, /no extra mounts and no Docker socket/);
   assert.match(contract.benchmark.temporal_support, /multiple processes/);
   assert.equal(contract.benchmark.id, "public-whole-system-tracking");
-  assert.equal(contract.benchmark.version, "2.0.0");
+  assert.equal(contract.benchmark.version, "3.0.0");
+  assert.deepEqual(contract.benchmark.resources, { cpu_limit: 4, memory_limit_mb: 8192, network_access: false });
+  assert.deepEqual(contract.benchmark.container_guards, { memory_swap_limit_mb: 8192, pids_limit: 512 });
+  assert.equal(contract.benchmark.run_budgets.max_run_seconds, 240);
   assert.equal(contract.benchmark.scenario_count, 16);
   assert.deepEqual(contract.benchmark.scenario_ids, PUBLIC_BENCHMARK.scenario_ids);
   assert.match(contract.benchmark.selection, /Every public v1 submission/);
@@ -86,6 +89,11 @@ test("public benchmark descriptor exactly matches its versioned manifest", async
   assert.equal(benchmark.version, PUBLIC_BENCHMARK.version);
   assert.equal(benchmark.input.replay_profile, PUBLIC_BENCHMARK.replay_profile);
   assert.equal({ "quarter-speed": 0.25, "half-speed": 0.5, native: 1 }[benchmark.input.replay_profile], PUBLIC_BENCHMARK.replay_rate);
+  assert.deepEqual(benchmark.resources, PUBLIC_BENCHMARK.resources);
+  assert.deepEqual(
+    Object.fromEntries(Object.keys(PUBLIC_BENCHMARK.run_budgets).map((key) => [key, benchmark[key]])),
+    PUBLIC_BENCHMARK.run_budgets,
+  );
   assert.deepEqual(scenarioIds, PUBLIC_BENCHMARK.scenario_ids);
   assert.equal(scenarioIds.length, PUBLIC_BENCHMARK.scenario_count);
   assert.equal(new Set(scenarioIds).size, scenarioIds.length);
@@ -199,6 +207,43 @@ test("submission create, public read, idempotent replay, lease, and scored resul
   assert.equal((await result(created.id, { status: "failed", lease_token: leased.lease.token, error: "late" })).status, 409);
 });
 
+test("historical completed results retain their Version 2 benchmark envelope", async () => {
+  const created = await (await submit(validBody(), "legacy-v2-record-0001")).json();
+  const legacy = scoredReport();
+  legacy.benchmark.version = "2.0.0";
+  legacy.provenance.benchmark_path = "benchmarks/public-whole-system-v2.yaml";
+  legacy.provenance.comparison_inputs.benchmark_version = "2.0.0";
+  for (const envelope of [
+    legacy.provenance.comparison_inputs.resource_envelope,
+    legacy.provenance.resource_envelope,
+  ]) {
+    envelope.benchmark.memory_limit_mb = 2048;
+    envelope.system.memory_limit_mb = 2048;
+  }
+  legacy.provenance.comparison_inputs.run_budgets.max_run_seconds = 90;
+  legacy.provenance.run_budgets.max_run_seconds = 90;
+  delete legacy.runtime_isolation.requested.memory_swap_limit_mb;
+  delete legacy.runtime_isolation.requested.pids_limit;
+  delete legacy.runtime_isolation.applied.memory_swap_limit_mb;
+  delete legacy.runtime_isolation.applied.pids_limit;
+  const row = store.rows.get(created.id);
+  Object.assign(row, { status: "succeeded", result: legacy, completedAt: Date.now(), updatedAt: Date.now() });
+
+  const publicRecord = await jsonRequest(`/api/v1/submissions/${created.id}`);
+  assert.equal(publicRecord.benchmark.version, "2.0.0");
+  assert.equal(publicRecord.benchmark.manifest, "benchmarks/public-whole-system-v2.yaml");
+  assert.equal(publicRecord.benchmark.resources.memory_limit_mb, 2048);
+  assert.equal(publicRecord.benchmark.run_budgets.max_run_seconds, 90);
+  assert.equal(publicRecord.benchmark.scenario_count, 16);
+  assert.equal(publicRecord.benchmark.container_guards, null);
+
+  const operator = await jsonRequest(`/api/v1/operator/jobs/${created.id}`, {
+    headers: { authorization: `Bearer ${OPERATOR_READ_TOKEN}` },
+  });
+  assert.equal(operator.job.provenance.benchmark.version, "2.0.0");
+  assert.equal(operator.job.provenance.benchmark.resources.memory_limit_mb, 2048);
+});
+
 test("runner callbacks must match the fixed public benchmark assignment", async () => {
   const created = await (await submit(validBody(), "wrong-suite-0001")).json();
   const leased = await (await lease()).json();
@@ -247,6 +292,44 @@ test("successful callbacks require internally consistent external cgroup evidenc
     ["multiple final samples", (report) => { report.resources.over_time[0].final_cumulative = true; }],
     ["false aggregate", (report) => { report.resources.cpu_time_seconds = 1; }],
     ["false availability", (report) => { report.resources.accounting_availability.disk_io = false; }],
+  ];
+  for (const [name, mutate] of probes) {
+    const report = scoredReport();
+    mutate(report);
+    const response = await result(created.id, {
+      status: "succeeded",
+      lease_token: leased.lease.token,
+      report,
+    });
+    assert.equal(response.status, 422, name);
+    assert.equal((await jsonRequest(`/api/v1/submissions/${created.id}`)).status, "running", name);
+  }
+  assert.equal((await result(created.id, {
+    status: "succeeded",
+    lease_token: leased.lease.token,
+    report: scoredReport(),
+  })).status, 200);
+});
+
+test("successful callbacks require the exact Version 3 resource and scenario contract", async () => {
+  const created = await (await submit(validBody(), "v3-contract-0001")).json();
+  const leased = await (await lease()).json();
+  const probes = [
+    ["requested memory", (report) => { report.runtime_isolation.requested.memory_limit_mb = 2048; }],
+    ["applied memory", (report) => { report.runtime_isolation.applied.memory_limit_mb = 2048; }],
+    ["swap guard", (report) => { report.runtime_isolation.applied.memory_swap_limit_mb = 16384; }],
+    ["process guard", (report) => { report.runtime_isolation.applied.pids_limit = 1024; }],
+    ["benchmark envelope", (report) => { report.provenance.resource_envelope.benchmark.memory_limit_mb = 2048; }],
+    ["comparison envelope", (report) => {
+      report.provenance.comparison_inputs.resource_envelope.system.memory_limit_mb = 2048;
+    }],
+    ["run budget", (report) => { report.provenance.run_budgets.max_run_seconds = 90; }],
+    ["comparison run budget", (report) => {
+      report.provenance.comparison_inputs.run_budgets.max_run_seconds = 90;
+    }],
+    ["benchmark path", (report) => { report.provenance.benchmark_path = "benchmarks/public-whole-system-v2.yaml"; }],
+    ["scenario set", (report) => { report.provenance.evaluation_order.scenario_ids.pop(); }],
+    ["comparison scenarios", (report) => { report.provenance.comparison_inputs.scenarios.pop(); }],
   ];
   for (const [name, mutate] of probes) {
     const report = scoredReport();
@@ -847,12 +930,19 @@ function validBody() {
 function scoredReport(runtimeIsolation = {}) {
   runtimeIsolation = {
     runtime: "docker",
-    requested: { cpu_limit: 4, memory_limit_mb: 2048, network_access: false },
+    requested: {
+      ...PUBLIC_BENCHMARK.resources,
+      ...PUBLIC_BENCHMARK.container_guards,
+    },
     status: "verified",
     container_id: "a".repeat(64),
     mounts: [{ source: "/tmp/cvb-run", destination: "/run/cvbench" }],
     network_mode: "none",
-    applied: { cpu_limit: 4, memory_limit_mb: 2048 },
+    applied: {
+      cpu_limit: PUBLIC_BENCHMARK.resources.cpu_limit,
+      memory_limit_mb: PUBLIC_BENCHMARK.resources.memory_limit_mb,
+      ...PUBLIC_BENCHMARK.container_guards,
+    },
     future_frame_isolation: true,
     ground_truth_access: false,
     repository_access: false,
@@ -1117,7 +1207,7 @@ function scoredReport(runtimeIsolation = {}) {
       replay_rate: 1,
       leaderboard_class: "native/cpu-2/realtime",
       comparison_fingerprint: "a".repeat(64),
-      benchmark_path: "benchmarks/public-whole-system-v2.yaml",
+      benchmark_path: PUBLIC_BENCHMARK.manifest,
       benchmark_sha256: "b".repeat(64),
       system_path: "systems/submitted.yaml",
       system_sha256: "c".repeat(64),
@@ -1144,16 +1234,11 @@ function scoredReport(runtimeIsolation = {}) {
         replay_profile: "native",
         playback_rate: 1,
         resource_envelope: {
-          benchmark: { cpu_limit: 4, memory_limit_mb: 2048, network_access: false },
-          system: { cpu_limit: 4, memory_limit_mb: 2048, network_access: false },
+          benchmark: { ...PUBLIC_BENCHMARK.resources },
+          system: { ...PUBLIC_BENCHMARK.resources },
         },
         run_budgets: {
-          max_run_seconds: 20,
-          max_drain_seconds: 3,
-          max_output_records: 10000,
-          max_output_line_bytes: 1048576,
-          max_total_output_bytes: 16777216,
-          max_output_records_per_second: 1000,
+          ...PUBLIC_BENCHMARK.run_budgets,
         },
         accounting_availability: {
           external_cgroup_v2: true,
@@ -1164,20 +1249,15 @@ function scoredReport(runtimeIsolation = {}) {
           disk_io: true,
         },
         thresholds: { minimum_match_iou: 0.5 },
-        evaluation_order: { mode: "configured_seed", algorithm: "sha256", seed: "public-v2" },
-        scenarios: [{ id: "public" }],
+        evaluation_order: { mode: "configured_seed", algorithm: "sha256", seed: "public-v3" },
+        scenarios: PUBLIC_BENCHMARK.scenario_ids.map((id) => ({ id })),
       },
       resource_envelope: {
-        benchmark: { cpu_limit: 4, memory_limit_mb: 2048, network_access: false },
-        system: { cpu_limit: 4, memory_limit_mb: 2048, network_access: false },
+        benchmark: { ...PUBLIC_BENCHMARK.resources },
+        system: { ...PUBLIC_BENCHMARK.resources },
       },
       run_budgets: {
-        max_run_seconds: 20,
-        max_drain_seconds: 3,
-        max_output_records: 10000,
-        max_output_line_bytes: 1048576,
-        max_total_output_bytes: 16777216,
-        max_output_records_per_second: 1000,
+        ...PUBLIC_BENCHMARK.run_budgets,
       },
       accounting_availability: {
         external_cgroup_v2: true,
@@ -1188,10 +1268,10 @@ function scoredReport(runtimeIsolation = {}) {
         disk_io: true,
       },
       evaluation_order: {
-        scenario_ids: PUBLIC_BENCHMARK.scenario_ids,
+        scenario_ids: [...PUBLIC_BENCHMARK.scenario_ids],
         mode: "configured_seed",
         algorithm: "sha256",
-        seed: "public-v2",
+        seed: "public-v3",
         private_per_run: false,
         run_scoped_sequence_ids: true,
         public_calibration_note: "Public scenarios are recognizable.",

@@ -30,7 +30,7 @@ def main() -> None:
         assert report["metrics"]["sample_counts"]["neutral_ignored_predictions"] == 0
     elif mode == "combined":
         assert report["benchmark"]["id"] == "public-whole-system-tracking"
-        assert report["benchmark"]["version"] == "2.0.0"
+        assert report["benchmark"]["version"] == "3.0.0"
         scenarios = report["provenance"]["comparison_inputs"]["scenarios"]
         expected_ids = {
             "synthetic-acquisition",
@@ -78,11 +78,19 @@ def main() -> None:
     assert isolation["network_mode"] == "none"
     assert isolation["expected_mount"]["destination"] == "/run/cvbench"
     assert isolation["mounts"] == [isolation["expected_mount"]]
-    assert isolation["applied"] == {"cpu_limit": 4.0, "memory_limit_mb": 2048.0}
+    expected_memory_mb = 8192 if mode == "combined" else 2048
+    assert isolation["applied"] == {
+        "cpu_limit": 4.0,
+        "memory_limit_mb": float(expected_memory_mb),
+        "memory_swap_limit_mb": float(expected_memory_mb),
+        "pids_limit": 512,
+    }
     assert isolation["requested"] == {
         "cpu_limit": 4,
-        "memory_limit_mb": 2048,
+        "memory_limit_mb": expected_memory_mb,
         "network_access": False,
+        "memory_swap_limit_mb": expected_memory_mb,
+        "pids_limit": 512,
     }
     assert report["resources"]["sample_count"] > 0
     assert report["resources"]["peak_process_count"] >= 1

@@ -17,5 +17,5 @@ shutdown:
 
 resources:
   cpu_limit: 4
-  memory_limit_mb: 2048
+  memory_limit_mb: 8192
   network_access: false

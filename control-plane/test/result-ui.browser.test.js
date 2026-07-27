@@ -47,6 +47,9 @@ function publicRecord() {
     benchmark: {
       id: "public-whole-system-tracking",
       version: "2.0.0",
+      resources: { cpu_limit: 4, memory_limit_mb: 2048, network_access: false },
+      run_budgets: { max_run_seconds: 90 },
+      scenario_count: 3,
       scenario_ids: ["rvmot-a1c9", "rvmot-b7e2", "rvmot-c4f6"],
     },
     attempt: 2,
@@ -210,6 +213,9 @@ test("quick submit safely retries and opens the formatted playback result", asyn
     assert.equal(await page.locator(".result-video-stage img").count(), 2);
     assert.equal(await page.getByText("84.3%").first().textContent(), "84.3%");
     assert.equal(await page.getByText("24.9 MiB").textContent(), "24.9 MiB");
+    await page.getByRole("heading", { name: "public-whole-system-tracking · Version 2.0.0" }).waitFor();
+    assert.equal(await page.getByText("2 GiB").textContent(), "2 GiB");
+    assert.equal(await page.getByText("90 seconds").textContent(), "90 seconds");
     assert.equal(await page.locator(".raw-result").getAttribute("open"), null);
     assert.match(await page.locator(".playback-disclosure").textContent(), /submitted system’s retained track projection/);
 

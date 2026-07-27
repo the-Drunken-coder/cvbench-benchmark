@@ -45,6 +45,9 @@ def test_docker_command_mounts_only_socket_and_disables_network(tmp_path: Path) 
     assert command[command.index("--cgroup-parent") + 1] == "/cvbench-test"
     assert command[command.index("--name") + 1].startswith("cvbench-")
     assert command[command.index("--network") + 1] == "none"
+    assert command[command.index("--memory") + 1] == "2048m"
+    assert command[command.index("--memory-swap") + 1] == "2048m"
+    assert command[command.index("--pids-limit") + 1] == "512"
     assert command[command.index("--user") + 1] == f"{EXPECTED_UID}:{EXPECTED_GID}"
     assert command[command.index("--volume") + 1] == f"{socket_dir}:/run/cvbench"
     assert str(ROOT) not in " ".join(command)
@@ -137,7 +140,13 @@ def test_docker_inspection_distinguishes_applied_limits(tmp_path: Path) -> None:
     )
     inspected = [
         {
-            "HostConfig": {"NanoCpus": 4_000_000_000, "Memory": 2048 * 1024 * 1024, "NetworkMode": "none"},
+            "HostConfig": {
+                "NanoCpus": 4_000_000_000,
+                "Memory": 2048 * 1024 * 1024,
+                "MemorySwap": 2048 * 1024 * 1024,
+                "PidsLimit": 512,
+                "NetworkMode": "none",
+            },
             "Mounts": [{"Source": str(tmp_path / "socket"), "Destination": "/run/cvbench"}],
             "Image": "sha256:image-id",
             "Config": {"Image": "sha256:image", "User": f"{EXPECTED_UID}:{EXPECTED_GID}"},
@@ -147,7 +156,12 @@ def test_docker_inspection_distinguishes_applied_limits(tmp_path: Path) -> None:
     with patch("cvbench.runtime.subprocess.run", return_value=result):
         evidence = verify_docker_isolation(runtime, tmp_path / "socket")
     assert evidence["status"] == "verified"
-    assert evidence["applied"] == {"cpu_limit": 4.0, "memory_limit_mb": 2048.0}
+    assert evidence["applied"] == {
+        "cpu_limit": 4.0,
+        "memory_limit_mb": 2048.0,
+        "memory_swap_limit_mb": 2048.0,
+        "pids_limit": 512,
+    }
     assert evidence["future_frame_isolation"] is True
     assert evidence["ground_truth_access"] is False
     assert evidence["repository_access"] is False
@@ -193,6 +207,17 @@ def test_docker_inspection_distinguishes_applied_limits(tmp_path: Path) -> None:
         evidence = verify_docker_isolation(runtime, tmp_path / "socket")
     assert evidence["status"] == "verified"
     assert "error" not in evidence
+
+    inspected[0]["HostConfig"]["MemorySwap"] = 4096 * 1024 * 1024
+    wrong_swap = MagicMock(returncode=0, stdout=json.dumps(inspected), stderr="")
+    with patch("cvbench.runtime.subprocess.run", return_value=wrong_swap):
+        assert verify_docker_isolation(runtime, tmp_path / "socket")["status"] == "verification_failed"
+    inspected[0]["HostConfig"]["MemorySwap"] = 2048 * 1024 * 1024
+
+    inspected[0]["HostConfig"]["PidsLimit"] = 1024
+    wrong_pids = MagicMock(returncode=0, stdout=json.dumps(inspected), stderr="")
+    with patch("cvbench.runtime.subprocess.run", return_value=wrong_pids):
+        assert verify_docker_isolation(runtime, tmp_path / "socket")["status"] == "verification_failed"
 
 
 def _minimal_verification_runtime(tmp_path: Path, *, with_cidfile: bool = True) -> StartedRuntime:
