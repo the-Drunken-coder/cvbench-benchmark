@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="CVBench measures complete online computer-vision tracking systems under repeatable faults, latency, and resource constraints.">
+    <title>CVBench — Benchmark the whole vision system</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="CVBench home"><span class="brand-mark">CV</span>Bench</a>
+      <nav aria-label="Primary navigation">
+        <a href="#measure">Measure</a>
+        <a href="/scenarios/">Scenarios</a>
+        <a href="#contract">Contract</a>
+        <a href="#submit">Submit</a>
+        <a href="/results/">Results</a>
+        <a href="/operator.html">Operator</a>
+        <a href="/api/v1/openapi.json">OpenAPI</a>
+      </nav>
+      <span class="live"><span></span> Public queue</span>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="eyebrow">Open benchmark · Reproducible systems · Honest clocks</div>
+        <h1>Benchmark the whole<br>vision system.</h1>
+        <p class="hero-copy">CVBench tests complete online vision systems—not isolated components. Submit one immutable <code>linux/amd64</code> OCI image. Detector, tracker, temporal memory, association, filtering, and post-processing pipelines may use one or many processes inside that image.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#submit">Submit a system image. <span>↗</span></a>
+          <a class="button secondary" href="#contract">Read the contract</a>
+          <a class="button secondary" href="/scenarios/">Inspect all scenarios</a>
+        </div>
+        <div class="hero-metrics" aria-label="Benchmark properties">
+          <div><strong>5</strong><span>metric families</span></div>
+          <div><strong>0</strong><span>future frames exposed</span></div>
+          <div><strong>100%</strong><span>external timing</span></div>
+        </div>
+      </section>
+
+      <section class="section dark" id="measure">
+        <div class="section-intro">
+          <span class="section-number">01</span>
+          <div><p class="kicker">What CVBench measures</p><h2>A leaderboard with receipts.</h2></div>
+          <p>Every new public submission runs the declared 16-scenario Version 3 suite at native pace: the same 13 deterministic synthetic tests and three exhaustive, full-frame, native-30-FPS real-video sequences, now with 4 CPUs, 8 GiB RAM, and a 240-second run budget. Native source time never changes. Accuracy, cgroup CPU-seconds per source-second, real-time factor, RAM, I/O, backlog, and deadline misses remain separate Pareto axes—there is no hidden blended score.</p>
+        </div>
+        <div class="metric-grid">
+          <article><span class="metric-index">A</span><h3>Accuracy</h3><p>Class-aware detection, HOTA, IDF1, localization, identity association, misses, and false tracks against frame-level ground truth.</p></article>
+          <article><span class="metric-index">R</span><h3>Robustness</h3><p>Acquisition, visible retention, identity continuity, occlusion recovery, and fault response.</p></article>
+          <article><span class="metric-index">L</span><h3>Latency</h3><p>Receive time minus source-frame time, recorded by the harness—not self-reported by the submitted system.</p></article>
+          <article><span class="metric-index">Ω</span><h3>Resources</h3><p>Container/cgroup CPU time, CPU-seconds per native source-second, memory, I/O, process count, and real-time factor sampled outside the submitted system. GPU data appears only for an isolated device.</p></article>
+          <article><span class="metric-index">!</span><h3>Diagnostics</h3><p>Structured findings and portable evidence packets for the largest observed failures.</p></article>
+        </div>
+      </section>
+
+      <section class="section contract" id="contract">
+        <div class="section-intro">
+          <span class="section-number">02</span>
+          <div><p class="kicker">The exact container contract</p><h2>Bring one immutable Linux image.</h2></div>
+          <p>The image is a packaging, reproducibility, and security boundary—not a one-model or one-process assumption. Submitted code runs only on ephemeral GitHub-hosted Linux runners; Cloudflare never executes it.</p>
+        </div>
+        <div class="layout-grid">
+          <div class="steps">
+            <article><span>1</span><div><h3>Ship a digest</h3><p>Use a public or runner-accessible <code>linux/amd64</code> OCI image pinned as <code>registry/repo@sha256:…</code>. Tags are rejected.</p></div></article>
+            <article><span>2</span><div><h3>Connect and become ready</h3><p>Your single- or multi-process system reads <code>CVBENCH_INPUT_SOCKET</code>, connects to the progressive socket, then prints exactly <code>CVBENCH_READY</code> as one stdout line.</p></div></article>
+            <article><span>3</span><div><h3>Consume ordered frames</h3><p>The same Unix stream stays open for the sequence. Detector + tracker pipelines may retain temporal memory, association state, filtering, and post-processing. Messages contain lengths, JSON metadata, then JPEG bytes.</p></div></article>
+            <article><span>4</span><div><h3>Emit tracks</h3><p>Print one <code>cvbench.track/v1</code> JSON object per stdout line. Put logs on stderr. The envelope is one <code>linux/amd64</code> image, network disabled, 4 CPUs, 8192 MB total memory, a 240-second run budget, one socket-directory mount, no extra mounts, and no Docker socket.</p></div></article>
+          </div>
+          <aside class="standard-card">
+            <p class="card-label">STANDARD LAYOUT / V1</p>
+            <pre><code>container
+├── your runtime + weights
+├── argv: ["python", "serve.py"]
+└── environment
+    └── CVBENCH_INPUT_SOCKET
+        = /run/cvbench/input.sock
+
+/run/cvbench/        # only mount
+└── input.sock        # streaming input
+
+stdout                # protocol only
+stderr                # diagnostics
+network               # disabled
+CPU / memory           # 4 / 8192 MB
+maximum run time       # 240 seconds</code></pre>
+            <a href="/api/v1/contract">Machine-readable contract →</a>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section code-section" id="submit">
+        <div class="section-intro">
+          <span class="section-number">03</span>
+          <div><p class="kicker">Submit once, retry safely</p><h2>Queue a published image in one minute.</h2></div>
+          <p>Already have a public <code>linux/amd64</code> image digest? Queue it here. Your submission key stays in this page, is sent only with this request, and is never placed in a URL or browser storage.</p>
+        </div>
+        <div class="quick-submit">
+          <div class="quick-submit-heading">
+            <div>
+              <p class="kicker">Quick submit</p>
+              <h3>Paste the immutable image. We handle the request.</h3>
+            </div>
+            <ol class="submit-prep" aria-label="Submission preparation">
+              <li><span>1</span> Build</li>
+              <li><span>2</span> Publish publicly</li>
+              <li><span>3</span> Paste digest</li>
+            </ol>
+          </div>
+          <form id="quick-submit-form" class="quick-submit-form" autocomplete="off">
+            <label class="field field-wide">Public image digest
+              <input name="image" type="text" spellcheck="false" required placeholder="ghcr.io/org/system@sha256:…">
+              <small>Tags are rejected. Paste a lowercase, digest-pinned OCI image.</small>
+            </label>
+            <label class="field">System name
+              <input name="name" type="text" required maxlength="100" placeholder="Acme Temporal Tracker">
+            </label>
+            <label class="field">System version
+              <input name="model_version" type="text" required maxlength="100" placeholder="7.0">
+            </label>
+            <fieldset class="argv-field field-wide">
+              <legend>Command arguments</legend>
+              <p>One exact argument per field—no shell quoting required.</p>
+              <div id="argv-list" class="argv-list">
+                <div class="argv-row"><input aria-label="Command argument 1" type="text" value="python" required><button type="button" class="remove-argv" aria-label="Remove command argument" disabled>×</button></div>
+                <div class="argv-row"><input aria-label="Command argument 2" type="text" value="-m" required><button type="button" class="remove-argv" aria-label="Remove command argument">×</button></div>
+                <div class="argv-row"><input aria-label="Command argument 3" type="text" placeholder="tracker" required><button type="button" class="remove-argv" aria-label="Remove command argument">×</button></div>
+              </div>
+              <button id="add-argv" type="button" class="text-button">+ Add argument</button>
+            </fieldset>
+            <label class="field field-wide">Submission API key
+              <input name="api_key" type="password" required autocomplete="new-password" placeholder="Paste key for this request">
+              <small>Held only in memory and cleared after the queue accepts the request.</small>
+            </label>
+            <details class="request-details field-wide">
+              <summary>Request safety details</summary>
+              <label>Stable idempotency key
+                <input id="quick-idempotency-key" name="idempotency_key" type="text" readonly>
+              </label>
+              <p>The same key is retained across a retry so a network interruption cannot create a duplicate.</p>
+            </details>
+            <div class="quick-submit-actions field-wide">
+              <button class="button primary" type="submit">Queue system <span>→</span></button>
+              <p id="quick-submit-status" role="status">Nothing is uploaded by this form; the runner pulls the published digest.</p>
+            </div>
+          </form>
+        </div>
+        <div class="api-examples-heading">
+          <p class="kicker">API and automation</p>
+          <p>Prefer a script or agent? Use the exact same idempotent endpoint.</p>
+        </div>
+        <div class="tab-bar" role="tablist" aria-label="Submission examples">
+          <button class="tab active" role="tab" aria-selected="true" data-tab="curl">curl</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="python">Python</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="agent">AI agent</button>
+        </div>
+        <div class="code-window">
+          <div class="code-toolbar"><span>POST /api/v1/submissions</span><button class="copy" data-copy-target="curl-example">Copy</button></div>
+          <pre id="curl-example" class="code-panel active" data-panel="curl"><code>curl -sS "$CVBENCH_API_BASE_URL/api/v1/submissions" \
+  -H "Authorization: Bearer $CVBENCH_API_KEY" \
+  -H "Idempotency-Key: my-system-v7-001" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "image": "ghcr.io/acme/tracker@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "argv": ["python", "-m", "tracker"],
+    "name": "Acme Temporal Tracker",
+    "model_version": "7.0"
+  }'</code></pre>
+          <pre class="code-panel" data-panel="python"><code>import os, uuid, requests
+
+response = requests.post(
+    f"{os.environ['CVBENCH_API_BASE_URL']}/api/v1/submissions",
+    headers={
+        "Authorization": f"Bearer {os.environ['CVBENCH_API_KEY']}",
+        "Idempotency-Key": str(uuid.uuid4()),
+    },
+    json={
+        "image": "ghcr.io/acme/tracker@sha256:...",
+        "argv": ["python", "-m", "tracker"],
+        "name": "Acme Temporal Tracker",
+        "model_version": "7.0",
+    },
+    timeout=30,
+)
+response.raise_for_status()
+print(response.json()["id"])</code></pre>
+          <pre class="code-panel" data-panel="agent"><code>Goal: win the public CVBench benchmark.
+
+1. GET /api/v1/contract and /api/v1/openapi.json.
+2. Build and publish a Linux/amd64 OCI image.
+3. Resolve its registry digest. Never submit a mutable tag. The image may contain a multi-process detector, tracker, temporal memory, association, filtering, and post-processing system.
+4. POST image + argv + metadata with bearer auth and a unique
+   Idempotency-Key. Do not send source, build steps, shell, or env.
+5. Poll the returned Location until status is succeeded or failed.
+6. Inspect result.metrics and diagnostics, improve the system,
+   publish a new digest, and submit with a new idempotency key.</code></pre>
+        </div>
+        <div class="callout"><strong>Need a key?</strong> The operator bootstraps one or more keys into the Worker secret <code>SUBMISSION_API_KEYS</code>. Keys are comma-separated for simple rotation and are never stored in job records.</div>
+      </section>
+
+      <section class="section results" id="results">
+        <div class="section-intro">
+          <span class="section-number">04</span>
+          <div><p class="kicker">Dedicated result studio</p><h2>Give every run its own page.</h2></div>
+          <p>The homepage stays focused. Open a submission on a dedicated, shareable page with benchmark playback, readable metrics, findings, and exact JSON.</p>
+        </div>
+        <div class="result-lookup">
+          <p class="kicker">Open a public result</p>
+          <form class="status-form" action="/results/" method="get">
+            <label for="submission-id">Submission UUID</label>
+            <div><input id="submission-id" name="submission" type="text" autocomplete="off" placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx" required><button class="button primary" type="submit">Open result</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="section security">
+        <div class="section-intro">
+          <span class="section-number">05</span>
+          <div><p class="kicker">Security boundary</p><h2>The queue is not the sandbox.</h2></div>
+          <p>The control plane validates intent. The existing CVBench engine enforces execution isolation on a disposable runner.</p>
+        </div>
+        <div class="security-list">
+          <p><span>01</span><strong>Cloudflare Worker</strong>Static assets, API validation, authentication, rate limits, and D1 state only.</p>
+          <p><span>02</span><strong>GitHub-hosted runner</strong>Leases one job, pulls the exact digest, runs CVBench, and posts the report back.</p>
+          <p><span>03</span><strong>Tested container</strong>No network, no Docker socket, an unprivileged UID/GID, CPU and memory caps, and only the progressive socket mount.</p>
+          <p><span>04</span><strong>Secret separation</strong>Runner and callback tokens stay in the host process environment and are removed from the benchmark subprocess environment.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <a class="brand" href="#top"><span class="brand-mark">CV</span>Bench</a>
+      <p>Open evidence for complete computer-vision systems.</p>
+      <div><a href="/results/">Results</a><a href="/scenarios/">Scenarios</a><a href="https://github.com/the-Drunken-coder/cvbench-benchmark">GitHub</a><a href="/api/v1/openapi.json">API</a></div>
+    </footer>
+  </body>
+</html>

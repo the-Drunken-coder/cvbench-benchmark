@@ -1,0 +1,21 @@
+schema_version: cvbench.system/v1
+id: deterministic-opencv-tracker-container
+revision: v1
+
+runtime:
+  type: docker
+  image: cvbench-example-good:v1
+  command: ["python", "-m", "cvbench.examples.good_tracker"]
+
+readiness:
+  type: stdout_pattern
+  pattern: CVBENCH_READY
+  timeout_seconds: 30
+
+shutdown:
+  grace_period_seconds: 10
+
+resources:
+  cpu_limit: 4
+  memory_limit_mb: 2048
+  network_access: false

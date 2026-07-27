@@ -1,0 +1,23 @@
+{
+  "schema_version": "cvbench.sanitized-baseline-evidence/v1",
+  "id": "track-id-churn",
+  "status": "public",
+  "system": {
+    "id": "example-good-tracker",
+    "name": "Bundled deterministic good tracker",
+    "version": "catalog-v1",
+    "sha256": "a15e3a1934131464270e8701f632daab667ccbf66ea64024c6ef44a91b92b54a"
+  },
+  "validation_status": "completed",
+  "benchmark_id": "long-running-stability",
+  "run_id": "20260722T125146Z-af4c4ff2",
+  "report_sha256": "865f7c7dbbeab04b53477abba252fcee416a7826ab1f8d7285dbbeb4aeb58379",
+  "scenarios": {
+    "synthetic-track-id-churn": {
+      "observed_coverage": 0.9878296146,
+      "track_id_reuse_events": 0,
+      "track_id_exhaustion_detected": false,
+      "state_contamination_events": 0
+    }
+  }
+}

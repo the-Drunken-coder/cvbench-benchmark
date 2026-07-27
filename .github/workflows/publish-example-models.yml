@@ -1,0 +1,54 @@
+name: Publish example model images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-example-model-images
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: cvbench-example-lite-mot
+            dockerfile: examples/Dockerfile.lite-mot
+          - image: cvbench-example-balanced-mot
+            dockerfile: examples/Dockerfile.balanced-mot
+          - image: cvbench-example-advanced-mot
+            dockerfile: examples/Dockerfile.advanced-mot
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+
+      - name: Sign in to GitHub Container Registry
+        run: echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish the linux/amd64 image
+        run: |
+          short_sha="$(git rev-parse --short=7 HEAD)"
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}"
+          docker buildx build \
+            --platform linux/amd64 \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "${image}:${short_sha}" \
+            --tag "${image}:v1" \
+            --push \
+            .
+
+      - name: Verify unauthenticated registry access
+        run: |
+          docker logout ghcr.io
+          docker manifest inspect \
+            "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}:v1"

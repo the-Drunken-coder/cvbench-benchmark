@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cvbench-benchmark"
+version = "1.0.0"
+description = "Local-first black-box benchmarking for online computer-vision tracking systems"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+dependencies = [
+  "numpy>=1.26,<3",
+  "opencv-python-headless>=4.9,<5",
+  "psutil>=5.9,<8",
+  "PyYAML>=6,<7",
+  "jsonschema>=4.23,<5",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+  "pytest-cov>=5,<7",
+  "ruff>=0.6,<1",
+]
+
+[project.scripts]
+cvbench = "cvbench.cli:main"
+cvbench-example-good = "cvbench.examples.good_tracker:main"
+cvbench-example-broken = "cvbench.examples.broken_tracker:main"
+cvbench-example-lite-mot = "cvbench.examples.reference_mot:lite_main"
+cvbench-example-balanced-mot = "cvbench.examples.reference_mot:balanced_main"
+cvbench-example-advanced-mot = "cvbench.examples.reference_mot:advanced_main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cvbench"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"schemas" = "cvbench/_schemas"
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

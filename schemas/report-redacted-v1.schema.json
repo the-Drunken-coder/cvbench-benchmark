@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cvbench.dev/schemas/report-redacted-v1.schema.json",
+  "title": "CVBench public-safe benchmark report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_schema_version",
+    "redaction",
+    "run_id",
+    "started_at",
+    "mode",
+    "benchmark",
+    "system",
+    "outcome",
+    "feed",
+    "timing",
+    "metrics",
+    "resources",
+    "leaderboard",
+    "runtime_isolation",
+    "findings",
+    "comparison",
+    "provenance",
+    "diagnostics",
+    "limitations",
+    "audit_evidence"
+  ],
+  "properties": {
+    "schema_version": {"const": "cvbench.report-redacted/v1"},
+    "source_schema_version": {"const": "cvbench.report/v1"},
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "redacted", "reason"],
+      "properties": {
+        "schema_version": {"const": "cvbench.redaction/v1"},
+        "redacted": {"const": true},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "run_id": {"$ref": "report-v1.schema.json#/properties/run_id"},
+    "started_at": {"$ref": "report-v1.schema.json#/properties/started_at"},
+    "mode": {"$ref": "report-v1.schema.json#/properties/mode"},
+    "benchmark": {"$ref": "report-v1.schema.json#/properties/benchmark"},
+    "system": {"$ref": "report-v1.schema.json#/properties/system"},
+    "outcome": {"$ref": "report-v1.schema.json#/properties/outcome"},
+    "feed": {"$ref": "report-v1.schema.json#/properties/feed"},
+    "timing": {"$ref": "report-v1.schema.json#/properties/timing"},
+    "metrics": {"$ref": "report-v1.schema.json#/properties/metrics"},
+    "resources": {"$ref": "report-v1.schema.json#/properties/resources"},
+    "leaderboard": {"$ref": "report-v1.schema.json#/properties/leaderboard"},
+    "runtime_isolation": {"$ref": "report-v1.schema.json#/properties/runtime_isolation"},
+    "findings": {"$ref": "report-v1.schema.json#/properties/findings"},
+    "comparison": {"$ref": "report-v1.schema.json#/properties/comparison"},
+    "provenance": {"$ref": "report-v1.schema.json#/properties/provenance"},
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "redacted", "reason", "match_count"],
+      "properties": {
+        "schema_version": {"const": "cvbench.diagnostics-redacted/v1"},
+        "redacted": {"const": true},
+        "reason": {"type": "string", "minLength": 1},
+        "match_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "limitations": {"$ref": "report-v1.schema.json#/properties/limitations"},
+    "audit_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "redacted", "reason"],
+      "properties": {
+        "schema_version": {"const": "cvbench.audit-redacted/v1"},
+        "redacted": {"const": true},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "runner": {"$ref": "report-v1.schema.json#/properties/runner"}
+  }
+}

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Inspect every current CVBench scenario, exact frame, public annotation, scoring boundary, license, hash, and baseline summary.">
+    <title>CVBench — Public scenario catalog</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/scenario-app.js"></script>
+  </head>
+  <body class="catalog-page">
+    <a class="skip-link" href="#main">Skip to catalog</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="CVBench home"><span class="brand-mark">CV</span>Bench</a>
+      <nav aria-label="Primary navigation">
+        <a href="/">Overview</a>
+        <a href="/scenarios/" aria-current="page">Scenarios</a>
+        <a href="/#contract">Contract</a>
+        <a href="/#submit">Submit</a>
+        <a href="/api/v1/openapi.json">OpenAPI</a>
+      </nav>
+      <span class="live"><span></span> Public catalog</span>
+    </header>
+
+    <main id="main" class="catalog-shell">
+      <section class="catalog-hero" aria-labelledby="catalog-title">
+        <p class="eyebrow">Catalog v1 · Exact benchmark bytes</p>
+        <h1 id="catalog-title">Every current scenario, open.</h1>
+        <p>All current CVBench scenarios, exact JPEG sequences, full annotations, and scoring boundaries are public. They can be tuned to or memorized. Runtime isolation protects execution; it does not make public data secret. Future hidden challenges are out of scope.</p>
+        <div class="catalog-stats" aria-label="Catalog summary">
+          <span><strong id="scenario-count">—</strong> scenarios</span>
+          <span><strong>13</strong> synthetic</span>
+          <span><strong>3</strong> real video</span>
+        </div>
+      </section>
+
+      <section class="catalog-browser" aria-labelledby="browse-title">
+        <div class="catalog-toolbar">
+          <div>
+            <p class="kicker">Public calibration set</p>
+            <h2 id="browse-title">Browse scenarios</h2>
+          </div>
+          <div class="catalog-filters" role="search">
+            <label>Search <input id="scenario-search" type="search" autocomplete="off" placeholder="Title, ID, failure mode"></label>
+            <label>Pack
+              <select id="pack-filter">
+                <option value="all">All packs</option>
+                <option value="synthetic-v1">Synthetic v1</option>
+                <option value="real-video-v2">Real video v2</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <p id="catalog-status" class="catalog-status" role="status">Loading the signed catalog…</p>
+        <div id="scenario-list" class="scenario-list" aria-live="polite"></div>
+      </section>
+
+      <section id="scenario-detail" class="scenario-detail" aria-labelledby="detail-title" hidden>
+        <div class="detail-heading">
+          <div>
+            <p id="detail-kicker" class="kicker"></p>
+            <h2 id="detail-title"></h2>
+            <p id="detail-description"></p>
+          </div>
+          <a class="button secondary" href="/scenarios/">Close detail</a>
+        </div>
+
+        <div class="viewer-grid">
+          <div class="frame-viewer" id="frame-viewer" tabindex="0" aria-label="Exact frame-sequence viewer. Use Space to play or pause, Left and Right arrows to step, and Home or End to jump.">
+            <div class="frame-stage" id="frame-stage">
+              <canvas id="scenario-frame" width="160" height="120" role="img" aria-label="Exact benchmark frame" data-frame-ready="false">Exact benchmark frame.</canvas>
+              <svg id="scenario-overlay" aria-hidden="true"></svg>
+              <p id="media-state" class="media-state" role="alert" hidden></p>
+            </div>
+            <div class="viewer-controls">
+              <button id="previous-frame" type="button" aria-label="Previous frame">←</button>
+              <button id="play-pause" type="button" aria-label="Play sequence">Play</button>
+              <button id="next-frame" type="button" aria-label="Next frame">→</button>
+              <label class="scrubber-label" for="frame-scrubber">Frame <span id="frame-position">0 / 0</span></label>
+              <input id="frame-scrubber" type="range" min="0" max="0" value="0" aria-describedby="frame-time">
+              <output id="frame-time">0.000 s</output>
+              <label class="speed-label" for="playback-speed">Speed
+                <select id="playback-speed">
+                  <option value="0.5">0.5×</option>
+                  <option value="1" selected>1×</option>
+                  <option value="2">2×</option>
+                </select>
+              </label>
+            </div>
+            <fieldset class="overlay-controls">
+              <legend>Overlays</legend>
+              <label id="objects-overlay-label"><input type="checkbox" data-overlay="targets" checked> <span>Targets</span></label>
+              <label id="ignores-overlay-label"><input type="checkbox" data-overlay="ignores" checked> Ignores</label>
+              <label id="region-overlay-label"><input type="checkbox" data-overlay="roi" checked> Scoreable boundary</label>
+              <label><input type="checkbox" data-overlay="faults" checked> Faults</label>
+              <label><input type="checkbox" data-overlay="labels" checked> Labels</label>
+            </fieldset>
+            <p id="overlay-disclosure" class="overlay-disclosure"></p>
+            <p id="viewer-announcement" class="sr-only" aria-live="polite"></p>
+          </div>
+
+          <aside class="frame-inspector" aria-labelledby="inspector-title">
+            <p class="kicker">Selected-frame inspection</p>
+            <h3 id="inspector-title">Frame facts</h3>
+            <dl id="frame-facts"></dl>
+            <h3>Annotations</h3>
+            <div id="frame-annotations" class="annotation-list"></div>
+          </aside>
+        </div>
+
+        <div class="detail-facts">
+          <section><p class="kicker">Scenario</p><h3>Task and policy</h3><dl id="scenario-facts"></dl></section>
+          <section><p class="kicker">Provenance</p><h3>Source and license</h3><div id="provenance-facts"></div></section>
+          <section><p class="kicker">First-party baseline</p><h3>Validation evidence</h3><dl id="baseline-facts"></dl></section>
+        </div>
+        <details class="machine-links">
+          <summary>Machine-readable manifests and hashes</summary>
+          <ul id="manifest-links"></ul>
+        </details>
+      </section>
+    </main>
+
+    <footer>
+      <a class="brand" href="/"><span class="brand-mark">CV</span>Bench</a>
+      <p>Public calibration data for complete computer-vision systems.</p>
+      <div><a href="/.well-known/cvbench-scenarios.json">Discovery</a><a href="/scenario-catalog/v1/catalog.json">Catalog JSON</a><a href="https://github.com/the-Drunken-coder/cvbench-benchmark">GitHub</a></div>
+    </footer>
+  </body>
+</html>

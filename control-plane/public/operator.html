@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <title>CVBench operator console</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/operator.js" defer></script>
+  </head>
+  <body class="operator-page">
+    <main class="operator-shell">
+      <p class="eyebrow">Private operator surface · JSON API backed</p>
+      <h1>Run control.</h1>
+      <p class="hero-copy">Watch queue state, inspect bounded evidence, evaluate review flags, and leave an adjudication trail. Submitted-system output is rendered as text.</p>
+      <form id="operator-auth" class="operator-auth">
+        <label for="operator-token">Operator read token</label>
+        <div><input id="operator-token" type="password" autocomplete="off" required></div>
+        <label for="adjudicator-token">Adjudicator write token</label>
+        <div><input id="adjudicator-token" type="password" autocomplete="off"><button class="button primary">Open console</button></div>
+        <small>Read and write credentials are separate and kept in memory for this page only.</small>
+      </form>
+      <section id="operator-console" hidden>
+        <div class="operator-toolbar"><label>Status <select id="status-filter"><option value="">all</option><option>queued</option><option>running</option><option>succeeded</option><option>failed</option></select></label><button id="refresh" class="button secondary" type="button">Refresh</button><label><input id="auto-refresh" type="checkbox" checked> poll every 5s</label></div>
+        <div class="operator-grid"><section><h2>Jobs</h2><div id="job-list" class="job-list"></div><button id="load-more" class="button secondary" type="button" hidden>Load next page</button></section><section><h2>Selected job</h2><div id="job-detail" class="status-output"><p>Select a job.</p></div><form id="adjudication-form" class="adjudication-form"><h3>Adjudication note</h3><label for="adjudication-verdict">Verdict</label><select id="adjudication-verdict"><option value="unreviewed">unreviewed</option><option value="needs_review">needs review</option><option value="adjudicated">adjudicated</option><option value="accepted">accepted</option><option value="rejected">rejected</option></select><label for="adjudication-note">Note</label><textarea id="adjudication-note" rows="4" maxlength="4000" required></textarea><button class="button secondary" type="submit">Save note</button><p id="adjudication-status" class="status-output" aria-live="polite"></p></form></section></div>
+      </section>
+    </main>
+  </body>
+</html>

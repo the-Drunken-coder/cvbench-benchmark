@@ -1,0 +1,35 @@
+{
+  "schema_version": "cvbench.scenario-baseline-index/v1",
+  "evidence_sources": {
+    "persistent-tracking": {
+      "path": "evidence/persistent-tracking.json",
+      "sha256": "93d2036fb5f913aa414edb1dfb429415e17c4a412b71b68322148844694afb50"
+    },
+    "real-video-v2": {
+      "path": "evidence/real-video-v2.json",
+      "sha256": "93ce709eb8aeb5edb1eed7e79fb5fb7fefcaa89c71b22ed59304225fdbabda38"
+    },
+    "track-id-churn": {
+      "path": "evidence/track-id-churn.json",
+      "sha256": "7cb98505ef571570a7335df0d474e1c3cd72feb1f0b51893e738e26b3a8acd55"
+    }
+  },
+  "scenarios": {
+    "rvmot-a1c9": { "evidence_id": "real-video-v2" },
+    "rvmot-b7e2": { "evidence_id": "real-video-v2" },
+    "rvmot-c4f6": { "evidence_id": "real-video-v2" },
+    "synthetic-acquisition": { "evidence_id": "persistent-tracking" },
+    "synthetic-false-detection": { "evidence_id": "persistent-tracking" },
+    "synthetic-multi-target-identity": { "evidence_id": "persistent-tracking" },
+    "synthetic-multi-target-pair": { "evidence_id": "persistent-tracking" },
+    "synthetic-occlusion-gap-1000ms": { "evidence_id": "persistent-tracking" },
+    "synthetic-occlusion-gap-100ms": { "evidence_id": "persistent-tracking" },
+    "synthetic-occlusion-gap-2000ms": { "evidence_id": "persistent-tracking" },
+    "synthetic-occlusion-gap-250ms": { "evidence_id": "persistent-tracking" },
+    "synthetic-occlusion-gap-500ms": { "evidence_id": "persistent-tracking" },
+    "synthetic-occlusion-reacquisition": { "evidence_id": "persistent-tracking" },
+    "synthetic-resource-stress": { "evidence_id": "persistent-tracking" },
+    "synthetic-track-id-churn": { "evidence_id": "track-id-churn" },
+    "synthetic-visible-retention": { "evidence_id": "persistent-tracking" }
+  }
+}

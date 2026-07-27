@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cvbench.dev/schemas/timing-compute-v1.schema.json",
+  "title": "CVBench timing and compute accounting v1",
+  "type": "object",
+  "required": ["contract_version", "source", "replay", "durations", "delivery", "processing_latency_ms", "native_source_offset_ms", "output", "clocks"],
+  "properties": {
+    "contract_version": {"const": "cvbench.timing-compute/v1"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["immutable", "frame_count", "duration_seconds", "sequences"],
+      "properties": {
+        "immutable": {"const": true},
+        "frame_count": {"type": "integer", "minimum": 0},
+        "duration_seconds": {"type": ["number", "null"], "minimum": 0},
+        "sequences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["scenario_id", "sequence_id", "frame_count", "duration_seconds", "nominal_fps", "timestamp_origin"],
+            "properties": {
+              "scenario_id": {"type": "string"},
+              "sequence_id": {"type": "string"},
+              "frame_count": {"type": "integer", "minimum": 1},
+              "duration_seconds": {"type": "number", "minimum": 0},
+              "nominal_fps": {"type": ["number", "null"], "exclusiveMinimum": 0},
+              "timestamp_origin": {"const": "scenario-relative nanoseconds"}
+            }
+          }
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "rate", "native_real_time", "allowlisted"],
+      "properties": {
+        "profile": {
+          "enum": ["quarter-speed", "half-speed", "native", "accelerated-test-20x", "accelerated-test-100x"]
+        },
+        "rate": {"enum": [0.25, 0.5, 1, 20, 100]},
+        "native_real_time": {"type": "boolean"},
+        "allowlisted": {"const": true}
+      }
+    },
+    "durations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wall_seconds", "runner_total_seconds", "teardown_seconds", "startup_seconds", "stream_delivery_seconds", "completion_seconds", "drain_seconds", "real_time_factor"],
+      "properties": {
+        "wall_seconds": {"type": "number", "minimum": 0},
+        "runner_total_seconds": {"type": ["number", "null"], "minimum": 0},
+        "teardown_seconds": {"type": ["number", "null"], "minimum": 0},
+        "startup_seconds": {"type": ["number", "null"], "minimum": 0},
+        "stream_delivery_seconds": {"type": ["number", "null"], "minimum": 0},
+        "completion_seconds": {"type": ["number", "null"], "minimum": 0},
+        "drain_seconds": {"type": ["number", "null"], "minimum": 0},
+        "real_time_factor": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_version",
+        "replay_profile",
+        "replay_rate",
+        "effective_replay_rate",
+        "delivered_frames_per_second",
+        "deadline_missed_frames",
+        "sender_pressure_frames",
+        "frame_count",
+        "delivered_frames",
+        "transport_failed_frames",
+        "policy_dropped_frames",
+        "sender_blocking_time_ms",
+        "benchmark_end_sender_call_ms",
+        "delivery_backlog_ms",
+        "sender_call_ms",
+        "input_queue_depth",
+        "input_queue_depth_available",
+        "input_queue_depth_note",
+        "semantics",
+        "per_frame"
+      ],
+      "properties": {
+        "policy_version": {"const": "cvbench.delivery-lossless/v1"},
+        "replay_profile": {"type": "string"},
+        "replay_rate": {"type": "number"},
+        "effective_replay_rate": {"type": ["number", "null"], "minimum": 0},
+        "delivered_frames_per_second": {"type": ["number", "null"], "minimum": 0},
+        "deadline_missed_frames": {"type": "integer", "minimum": 0},
+        "sender_pressure_frames": {"type": "integer", "minimum": 0},
+        "frame_count": {"type": "integer", "minimum": 0},
+        "delivered_frames": {"type": "integer", "minimum": 0},
+        "transport_failed_frames": {"type": "integer", "minimum": 0},
+        "policy_dropped_frames": {"type": "integer", "minimum": 0},
+        "sender_blocking_time_ms": {"type": "number", "minimum": 0},
+        "benchmark_end_sender_call_ms": {"type": ["number", "null"], "minimum": 0},
+        "delivery_backlog_ms": {"$ref": "#/$defs/distribution"},
+        "sender_call_ms": {"$ref": "#/$defs/distribution"},
+        "input_queue_depth": {"type": "null"},
+        "input_queue_depth_available": {"const": false},
+        "input_queue_depth_note": {"type": "string"},
+        "semantics": {"type": "string"},
+        "per_frame_compaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["truncated", "retention", "original_frames", "retained_frames", "omitted_frames"],
+          "properties": {
+            "truncated": {"type": "boolean"},
+            "retention": {"const": "head_and_tail"},
+            "original_frames": {"type": "integer", "minimum": 0},
+            "retained_frames": {"type": "integer", "minimum": 0},
+            "omitted_frames": {"type": "integer", "minimum": 0}
+          }
+        },
+        "per_frame": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sequence_id", "frame_index", "native_source_timestamp_ns", "scheduled_delivery_offset_ms", "scoring_delivery_offset_ms", "delivery_backlog_ms", "sender_call_ms", "sender_pressure", "deadline_missed", "delivered", "drop_reason"],
+            "properties": {
+              "sequence_id": {"type": "string"},
+              "frame_index": {"type": "integer", "minimum": 0},
+              "native_source_timestamp_ns": {"type": "integer", "minimum": 0},
+              "scheduled_delivery_offset_ms": {"type": "number", "minimum": 0},
+              "scoring_delivery_offset_ms": {
+                "type": ["number", "null"],
+                "description": "Successful complete-frame send boundary relative to the first scheduled frame; accelerated/offline delivery may be negative, and failed or intentionally dropped delivery is null."
+              },
+              "delivery_backlog_ms": {"type": "number", "minimum": 0},
+              "sender_call_ms": {"type": "number", "minimum": 0},
+              "sender_pressure": {"type": "boolean"},
+              "deadline_missed": {"type": "boolean"},
+              "delivered": {"type": "boolean"},
+              "drop_reason": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "processing_latency_ms": {
+      "$ref": "#/$defs/distribution",
+      "description": "Scored online latency from successful complete-frame delivery to externally collected output."
+    },
+    "native_source_offset_ms": {
+      "$ref": "#/$defs/signedDistribution",
+      "description": "Non-scoring collector offset from the immutable native source timeline; positive values include intentionally slower replay pacing."
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "records_per_native_source_second", "records_per_completion_second", "late_after_benchmark_end", "late_output_policy"],
+      "properties": {
+        "records": {"type": "integer", "minimum": 0},
+        "records_per_native_source_second": {"type": ["number", "null"], "minimum": 0},
+        "records_per_completion_second": {"type": ["number", "null"], "minimum": 0},
+        "late_after_benchmark_end": {"type": "integer", "minimum": 0},
+        "late_output_policy": {"type": "string"}
+      }
+    },
+    "clocks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "delivery", "completion"],
+      "properties": {
+        "source": {"type": "string"},
+        "delivery": {"type": "string"},
+        "completion": {"type": "string"}
+      }
+    }
+  },
+  "$defs": {
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_count", "minimum", "median", "p95", "maximum"],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 0},
+        "minimum": {"type": ["number", "null"], "minimum": 0},
+        "median": {"type": ["number", "null"], "minimum": 0},
+        "p95": {"type": ["number", "null"], "minimum": 0},
+        "maximum": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "signedDistribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_count", "minimum", "median", "p95", "maximum"],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 0},
+        "minimum": {"type": ["number", "null"]},
+        "median": {"type": ["number", "null"]},
+        "p95": {"type": ["number", "null"]},
+        "maximum": {"type": ["number", "null"]}
+      }
+    }
+  },
+  "additionalProperties": false
+}

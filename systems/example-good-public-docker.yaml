@@ -1,0 +1,21 @@
+schema_version: cvbench.system/v1
+id: example-good-public
+revision: "1.0.0"
+
+runtime:
+  type: docker
+  image: cvbench-example-good:v1
+  command: ["python", "-m", "cvbench.examples.good_tracker"]
+
+readiness:
+  type: stdout_pattern
+  pattern: CVBENCH_READY
+  timeout_seconds: 10
+
+shutdown:
+  grace_period_seconds: 2
+
+resources:
+  cpu_limit: 4
+  memory_limit_mb: 8192
+  network_access: false

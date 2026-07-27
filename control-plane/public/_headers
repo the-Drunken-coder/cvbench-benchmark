@@ -1,0 +1,26 @@
+/*
+  Content-Security-Policy: default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/scenario-catalog/v1/assets/*
+  Cache-Control: public, max-age=31556952, immutable
+
+/scenario-catalog/v1/frame-manifests/*
+  Cache-Control: public, max-age=31556952, immutable
+
+/scenario-catalog/v1/annotation-manifests/*
+  Cache-Control: public, max-age=31556952, immutable
+
+/scenario-catalog/v1/baseline-manifests/*
+  Cache-Control: public, max-age=31556952, immutable
+
+/scenario-catalog/v1/catalog.json
+  Cache-Control: public, max-age=0, must-revalidate
+
+/scenario-catalog/v1/scenarios/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/.well-known/cvbench-scenarios.json
+  Cache-Control: public, max-age=0, must-revalidate

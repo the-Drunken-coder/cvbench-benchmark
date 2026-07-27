@@ -1,0 +1,27 @@
+{
+  "schema_version": "cvbench.scenario-playback-evidence/v1",
+  "baseline": {
+    "commit": "52bc11eed23d0492f2f8affac262a7dbf7b89792",
+    "media_delay_ms": 60,
+    "measurement_window_ms": 1206.7,
+    "last_frame_index": 24,
+    "source_elapsed_ms": 800,
+    "source_clock_drift_ms": -406.7,
+    "blank_animation_frames": 141
+  },
+  "implementation": {
+    "media_delay_ms": 60,
+    "measurement_window_ms": 1204.8,
+    "last_frame_index": 31,
+    "source_elapsed_ms": 1033.3,
+    "source_clock_drift_ms": -171.5,
+    "blank_animation_frames": 0
+  },
+  "method": {
+    "command": "npm run measure:playback -- --media-delay=60",
+    "scenario_id": "rvmot-a1c9",
+    "browser": "headless Chrome",
+    "cache": "cold",
+    "notes": "The wall-clock window starts before intentional startup buffering. In-play real-browser tests separately enforce drift within two source frames at 24, 30, and 60 FPS and at 0.5x, 1x, and 2x."
+  }
+}

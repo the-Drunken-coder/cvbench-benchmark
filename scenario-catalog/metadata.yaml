@@ -1,0 +1,143 @@
+schema_version: cvbench.scenario-catalog-metadata/v1
+catalog:
+  version: 2.0.0
+  status: public
+  title: CVBench public scenario catalog
+  description: Exact public calibration media, annotations, scoring boundaries, and baseline evidence for every current CVBench scenario.
+  author: CVBench contributors
+scenarios:
+  synthetic-acquisition:
+    title: First acquisition
+    description: A single synthetic target enters a clean field and must be acquired promptly.
+    failure_modes: [late acquisition, missed entry, unstable initial identity]
+  synthetic-visible-retention:
+    title: Visible retention
+    description: A continuously visible synthetic target tests uninterrupted tracking.
+    failure_modes: [visible dropout, localization drift, premature track termination]
+  synthetic-occlusion-reacquisition:
+    title: Occlusion reacquisition
+    description: A target disappears behind a deterministic occluder and returns.
+    failure_modes: [failed reacquisition, identity switch, false coasting]
+  synthetic-multi-target-pair:
+    title: Two-target tracking
+    description: Two simultaneous targets test independent tracks and duplicate suppression.
+    failure_modes: [track merge, duplicate track, missed target]
+  synthetic-multi-target-identity:
+    title: Multi-target identity
+    description: Four targets exercise association and stable identity under crossing motion.
+    failure_modes: [identity switch, track merge, track fragmentation]
+  synthetic-false-detection:
+    title: Empty ground truth
+    description: A deliberately target-free sequence measures hallucinations; its exhaustive annotation set is empty.
+    failure_modes: [background hallucination, persistent false track, false high confidence]
+  synthetic-resource-stress:
+    title: Resource stress
+    description: Eight simultaneous synthetic targets increase association and processing load.
+    failure_modes: [latency growth, dropped targets, resource saturation]
+  synthetic-occlusion-gap-100ms:
+    title: 100 ms occlusion gap
+    description: A short full occlusion tests continuity at the smallest gap tier.
+    failure_modes: [short-gap identity switch, duplicate reacquisition]
+  synthetic-occlusion-gap-250ms:
+    title: 250 ms occlusion gap
+    description: A quarter-second full occlusion tests temporal memory.
+    failure_modes: [identity switch, slow reacquisition]
+  synthetic-occlusion-gap-500ms:
+    title: 500 ms occlusion gap
+    description: A half-second full occlusion tests association beyond immediate motion.
+    failure_modes: [identity reset, missed return]
+  synthetic-occlusion-gap-1000ms:
+    title: 1 second occlusion gap
+    description: A one-second full occlusion tests durable temporal state.
+    failure_modes: [track expiry, new-identity reacquisition]
+  synthetic-occlusion-gap-2000ms:
+    title: 2 second occlusion gap
+    description: The longest synthetic occlusion tests controlled track retirement and return.
+    failure_modes: [stale coasting, failed reacquisition, identity reuse]
+  synthetic-track-id-churn:
+    title: Track ID churn
+    description: Forty-eight short-lived target births test ID lifecycle integrity over the longest current sequence.
+    failure_modes: [track ID reuse, ID exhaustion, state contamination]
+  rvmot-a1c9:
+    title: Vehicle loading and partial occlusion
+    description: A continuous five-second MEVA sequence tracks every supported mover across the full image while people work around a vehicle.
+    failure_modes: [partial-occlusion loss, duplicate identity, incomplete track]
+  rvmot-b7e2:
+    title: Close-proximity handoff
+    description: Two people overlap and exchange position beside a vehicle during a continuous native-cadence full-frame sequence.
+    failure_modes: [identity switch, track merge, fragmentation]
+  rvmot-c4f6:
+    title: Parking-area people and vehicles
+    description: A wide MEVA view combines close people, a truncated entrant, and road vehicles under full-frame exhaustive scoring.
+    failure_modes: [small-object miss, background false track, cross-class association error]
+sources:
+  synthetic:
+    title: CVBench deterministic synthetic generator
+    creator: CVBench contributors
+    source_url: https://github.com/the-Drunken-coder/cvbench-benchmark/blob/main/src/cvbench/synthetic.py
+    license: CC0-1.0
+    attribution: No attribution required; provenance retained for reproducibility.
+    transformation: Generated deterministically as exact JPEG frame sequences by cvbench.synthetic.
+  rvmot-a1c9:
+    title: MEVA KF1 2018-03-05 bus camera G340
+    creator: Kitware Inc. and the Intelligence Advanced Research Projects Activity (IARPA)
+    dataset: Multiview Extended Video with Activities (MEVA) Known Facility 1
+    dataset_version: Ground-camera r13 video; Kitware annotation commit 421841a75577b697c314e952e585aecbb1b99e17
+    sequence: 2018-03-05.13-15-00.13-20-00.bus.G340.r13.avi
+    source_url: https://mevadata-public-01.s3.amazonaws.com/drops-123-r13/2018-03-05/13/2018-03-05.13-15-00.13-20-00.bus.G340.r13.avi
+    annotation_url: https://gitlab.kitware.com/meva/meva-data-repo/-/tree/421841a75577b697c314e952e585aecbb1b99e17/annotation/DIVA-phase-2/MEVA/kitware/2018-03-05/13
+    license: CC-BY-4.0
+    license_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: MEVA dataset by Kitware Inc. and IARPA, licensed CC BY 4.0; CVBench derivative modifications stated below.
+    frame_range: Source frames 2813–2962 inclusive
+    native_fps: 30 FPS
+    transformation: Exact consecutive frames downscaled from 1920x1080 to 896x504 without aspect distortion and re-encoded as deterministic JPEG quality 78; upstream boxes scaled to output pixels.
+    annotation_provenance: Per-frame MEVA geometry and types records supply class, box, and upstream identity; every output frame was visually inspected.
+    corrections: Upstream activity IDs [3,9,13,14] map to p-001, [6] to p-002, and [2,4,5,7,10] to v-001 after visually verified same-object reconciliation; coordinate medians resolve duplicate boxes; no temporal interpolation.
+    source_sha256: 6a99ed045f9d29a77f726856298d75b8a0890621242f90535316b303e06afd34
+    annotation_geom_sha256: 40236c84c263fb8c7764e888656600bfa720a5eaf2c96348b0567d4349dcdf1f
+    annotation_types_sha256: 3702fb5c75dee26c7dcd28ca95b0ae49662455da60433ea8574819fcb0553eb7
+  rvmot-b7e2:
+    title: MEVA KF1 2018-03-05 bus camera G340
+    creator: Kitware Inc. and the Intelligence Advanced Research Projects Activity (IARPA)
+    dataset: Multiview Extended Video with Activities (MEVA) Known Facility 1
+    dataset_version: Ground-camera r13 video; Kitware annotation commit 421841a75577b697c314e952e585aecbb1b99e17
+    sequence: 2018-03-05.13-15-00.13-20-00.bus.G340.r13.avi
+    source_url: https://mevadata-public-01.s3.amazonaws.com/drops-123-r13/2018-03-05/13/2018-03-05.13-15-00.13-20-00.bus.G340.r13.avi
+    annotation_url: https://gitlab.kitware.com/meva/meva-data-repo/-/tree/421841a75577b697c314e952e585aecbb1b99e17/annotation/DIVA-phase-2/MEVA/kitware/2018-03-05/13
+    license: CC-BY-4.0
+    license_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: MEVA dataset by Kitware Inc. and IARPA, licensed CC BY 4.0; CVBench derivative modifications stated below.
+    frame_range: Source frames 3039–3188 inclusive
+    native_fps: 30 FPS
+    transformation: Exact consecutive frames downscaled from 1920x1080 to 896x504 without aspect distortion and re-encoded as deterministic JPEG quality 78; upstream boxes scaled to output pixels.
+    annotation_provenance: Per-frame MEVA geometry and types records supply class, box, and upstream identity; every output frame was visually inspected.
+    corrections: Upstream activity IDs [20,22,39] map to p-001, [21,40] to p-002, and [23] to v-001; the hash-bound visual audit extends the visibly present v-001 through frames 0–89; coordinate medians resolve duplicate boxes; no temporal interpolation is accepted as truth.
+    source_sha256: 6a99ed045f9d29a77f726856298d75b8a0890621242f90535316b303e06afd34
+    annotation_geom_sha256: 40236c84c263fb8c7764e888656600bfa720a5eaf2c96348b0567d4349dcdf1f
+    annotation_types_sha256: 3702fb5c75dee26c7dcd28ca95b0ae49662455da60433ea8574819fcb0553eb7
+  rvmot-c4f6:
+    title: MEVA KF1 2018-03-05 school camera G328
+    creator: Kitware Inc. and the Intelligence Advanced Research Projects Activity (IARPA)
+    dataset: Multiview Extended Video with Activities (MEVA) Known Facility 1
+    dataset_version: Ground-camera r13 video; Kitware annotation commit 421841a75577b697c314e952e585aecbb1b99e17
+    sequence: 2018-03-05.13-20-01.13-25-01.school.G328.r13.avi
+    source_url: https://mevadata-public-01.s3.amazonaws.com/drops-123-r13/2018-03-05/13/2018-03-05.13-20-01.13-25-01.school.G328.r13.avi
+    annotation_url: https://gitlab.kitware.com/meva/meva-data-repo/-/tree/421841a75577b697c314e952e585aecbb1b99e17/annotation/DIVA-phase-2/MEVA/kitware/2018-03-05/13
+    license: CC-BY-4.0
+    license_url: https://creativecommons.org/licenses/by/4.0/
+    attribution: MEVA dataset by Kitware Inc. and IARPA, licensed CC BY 4.0; CVBench derivative modifications stated below.
+    frame_range: Source frames 3272–3421 inclusive
+    native_fps: 30 FPS
+    transformation: Exact consecutive frames downscaled from 1920x1072 to 896x500 without aspect distortion and re-encoded as deterministic JPEG quality 78; upstream boxes scaled to output pixels.
+    annotation_provenance: Per-frame MEVA geometry and types records supply class, box, and upstream identity; every output frame was visually inspected.
+    corrections: Upstream activity IDs are reconciled into four people and three vehicles; the hash-bound visual audit extends p-004 through frames 72–149 and v-003 through frames 0–31 and 85–149; coordinate medians resolve duplicate boxes; no temporal interpolation is accepted as truth.
+    source_sha256: 64102272e6611681dbcf7d6fa5ac7aa939595ce29d54151ff604c077e9061dd1
+    annotation_geom_sha256: fa7c62bce3bac7a49189ff1eb36f7f0c17be8b42a2053aecf50cceaff956cd42
+    annotation_types_sha256: 52a5e77f2372c6ab8ef130bcff6cad617aa96a8b33595175817d60c03812ac63
+preparation:
+  identity: cvbench-real-video-prep/v2
+  platform: linux/amd64
+  base_image: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+  toolchain: Python 3.12; OpenCV 4.13.0.92; NumPy 2.5.1; PyYAML 6.0.3
+  expected_frame_manifest: scenarios/real-video-v2/expected-frame-sha256.txt

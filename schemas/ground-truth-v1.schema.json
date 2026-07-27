@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cvbench.dev/schemas/ground-truth-v1.schema.json",
+  "title": "CVBench ground truth v1",
+  "type": "object",
+  "required": ["target_id", "sequence_id", "source_timestamp_ns", "on_screen", "eligible_for_detection", "visibility_fraction", "occlusion", "class_id"],
+  "properties": {
+    "target_id": {"type": "string"},
+    "sequence_id": {"type": "string"},
+    "source_timestamp_ns": {"type": "integer", "minimum": 0},
+    "on_screen": {"type": "boolean"},
+    "eligible_for_detection": {"type": "boolean"},
+    "visibility_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "occlusion": {"enum": ["none", "partial", "full"]},
+    "class_id": {"type": "string"},
+    "ignore": {"type": "boolean", "default": false},
+    "ignore_region": {"type": "boolean", "default": false},
+    "ignore_region_id": {"type": "string", "minLength": 1},
+    "bbox_xyxy": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+    "entry_event": {"type": "boolean"},
+    "exit_event": {"type": "boolean"},
+    "vision_loss_interval": {"type": "boolean"},
+    "reappearance_event": {"type": "boolean"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["on_screen"],
+        "properties": {"on_screen": {"const": true}}
+      },
+      "then": {"required": ["bbox_xyxy"]}
+    },
+    {
+      "if": {
+        "required": ["ignore_region"],
+        "properties": {"ignore_region": {"const": true}}
+      },
+      "then": {"required": ["ignore", "ignore_region_id"], "properties": {"ignore": {"const": true}}}
+    },
+    {
+      "if": {"required": ["ignore_region_id"]},
+      "then": {"required": ["ignore_region"], "properties": {"ignore_region": {"const": true}}}
+    }
+  ],
+  "additionalProperties": true
+}

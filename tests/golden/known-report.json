@@ -1,0 +1,570 @@
+{
+  "benchmark": {
+    "id": "golden",
+    "version": "1"
+  },
+  "comparison": [],
+  "diagnostics": {
+    "collector_errors": [],
+    "match_count": 5
+  },
+  "feed": {
+    "delivered_frames": 16,
+    "dropped_frames": 0
+  },
+  "findings": [],
+  "limitations": [],
+  "metrics": {
+    "acquisition": {
+      "acquired_targets": 2,
+      "maximum": 220.0,
+      "median": 110.0,
+      "never_acquired_targets": 1,
+      "p90": 198.0,
+      "p95": 209.0,
+      "p99": 217.8,
+      "per_target_latency_ms": {
+        "acquisition:gt-1": 220.0,
+        "false:gt-1": null,
+        "reacquisition:gt-1": 0.0
+      },
+      "rate": 0.6666666666666666,
+      "sample_count": 2,
+      "total_eligible_targets": 3,
+      "within_deadline": {
+        "100": 0.3333333333333333,
+        "1000": 0.6666666666666666,
+        "250": 0.6666666666666666,
+        "500": 0.6666666666666666
+      }
+    },
+    "coverage": {
+      "by_scenario": {
+        "unknown": 0.5193929173693086
+      },
+      "by_visibility": {
+        "full": 0.5193929173693086
+      },
+      "eligible_target_time_ms": 5930.0,
+      "overall_continuity": 0.5193929173693086,
+      "overall_observed": 0.5193929173693086,
+      "per_target": {
+        "acquisition:gt-1": {
+          "continuity": 0.8347826086956521,
+          "eligible_duration_ms": 3450.0,
+          "observed_coverage": 0.8347826086956521
+        },
+        "false:gt-1": {
+          "continuity": 0.0,
+          "eligible_duration_ms": 2000.0,
+          "observed_coverage": 0.0
+        },
+        "reacquisition:gt-1": {
+          "continuity": 0.4166666666666667,
+          "eligible_duration_ms": 480.0,
+          "observed_coverage": 0.4166666666666667
+        }
+      }
+    },
+    "false_detections": {
+      "by_scenario": {
+        "unknown": 2
+      },
+      "detections": 2,
+      "detections_per_camera_minute": 19.575856443719413,
+      "false_track_seconds_per_camera_hour": 1174.5513866231647,
+      "high_confidence_false_detections": 2,
+      "longest_lived_false_track_ms": 2000.0,
+      "neutral_ignored_annotation_ids": [],
+      "neutral_ignored_by_scenario": {},
+      "neutral_ignored_predictions": 0,
+      "one_frame_false_detections": 0,
+      "persistent_track_births": 1,
+      "track_births": 1,
+      "track_births_per_camera_hour": 587.2756933115824,
+      "track_duration_ms": {
+        "maximum": 2000.0,
+        "median": 2000.0,
+        "p90": 2000.0,
+        "p95": 2000.0,
+        "p99": 2000.0,
+        "sample_count": 1
+      }
+    },
+    "identity": {
+      "duplicate_tracks": 0,
+      "duplicate_tracks_per_real_target": {},
+      "id_switches": 0,
+      "id_switches_per_target_minute": 0.0,
+      "track_fragmentation": 2,
+      "track_merges": 0,
+      "track_splits": 0
+    },
+    "latency": {
+      "by_target_count": {
+        "0": {
+          "maximum": 5.0,
+          "median": 5.0,
+          "p90": 5.0,
+          "p95": 5.0,
+          "p99": 5.0,
+          "sample_count": 2
+        },
+        "1": {
+          "maximum": 5.0,
+          "median": 5.0,
+          "p90": 5.0,
+          "p95": 5.0,
+          "p99": 5.0,
+          "sample_count": 7
+        }
+      },
+      "clock": "source_timestamp_compatibility",
+      "deadline_miss_rate": 0.0,
+      "deadline_ms": 250.0,
+      "drift_ms": 0.0,
+      "first_confirmed_ms": 5.0,
+      "first_tentative_ms": null,
+      "maximum": 5.0,
+      "median": 5.0,
+      "native_source_offset_ms": null,
+      "output_update_rate_hz": 1.468189233278956,
+      "over_time_ms": [
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ],
+      "p90": 5.0,
+      "p95": 5.0,
+      "p99": 5.0,
+      "sample_count": 9,
+      "under_fault_injection": {
+        "maximum": null,
+        "median": null,
+        "p90": null,
+        "p95": null,
+        "p99": null,
+        "sample_count": 0
+      }
+    },
+    "localization": {
+      "center_error_px": {
+        "maximum": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "sample_count": 5
+      },
+      "mean_height_error_px": 0.0,
+      "mean_iou": 1.0,
+      "mean_iou_by_target_size": {
+        "small": 1.0
+      },
+      "mean_iou_by_visibility": {
+        "full": 1.0
+      },
+      "mean_width_error_px": 0.0,
+      "median_iou": 1.0,
+      "normalized_center_error": {
+        "maximum": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "sample_count": 5
+      },
+      "sample_count": 5
+    },
+    "long_running_stability": {
+      "active_track_id_alias_events": 0,
+      "distinct_physical_target_births": 2,
+      "ended_track_id_reuse_events": 0,
+      "false_positive_accumulation_per_camera_minute": 44.776119402985074,
+      "false_positive_rate_first_half_per_camera_minute": 0.0,
+      "false_positive_rate_second_half_per_camera_minute": 44.776119402985074,
+      "interruption_recovery_rate": null,
+      "latency_drift_ms": 0.0,
+      "state_contaminated_track_ids": [],
+      "state_contamination_events": 0,
+      "track_id_exhaustion_detected": false,
+      "track_id_reuse_detected": false,
+      "track_id_reuse_events": 0,
+      "track_id_reuse_evidence": [],
+      "unique_track_ids": 2
+    },
+    "multi_object_tracking": {
+      "association_accuracy": 0.3583333333333333,
+      "by_scenario": {
+        "acquisition": {
+          "association_accuracy": 0.375,
+          "ground_truth_detections": 8,
+          "ground_truth_tracks": 1,
+          "hota": 0.375,
+          "idf1": 0.5454545454545454,
+          "tracker_detections": 3,
+          "tracker_tracks": 1
+        },
+        "false": {
+          "association_accuracy": 0.0,
+          "ground_truth_detections": 2,
+          "ground_truth_tracks": 1,
+          "hota": 0.0,
+          "idf1": 0.0,
+          "tracker_detections": 2,
+          "tracker_tracks": 1
+        },
+        "reacquisition": {
+          "association_accuracy": 0.3333333333333333,
+          "ground_truth_detections": 4,
+          "ground_truth_tracks": 1,
+          "hota": 0.3333333333333333,
+          "idf1": 0.5,
+          "tracker_detections": 4,
+          "tracker_tracks": 1
+        }
+      },
+      "class_aware": true,
+      "detection_accuracy": 0.2777777777777778,
+      "ground_truth_detections": 14,
+      "ground_truth_tracks": 3,
+      "hota": 0.3154949081000152,
+      "hota_by_iou_threshold": [
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.05,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.1,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.15,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.2,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.25,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.3,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.35,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.4,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.45,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.5,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.55,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.6,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.65,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.7,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.75,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.8,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.85,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.9,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        },
+        {
+          "association_accuracy": 0.3583333333333333,
+          "detection_accuracy": 0.2777777777777778,
+          "false_negatives": 9,
+          "false_positives": 4,
+          "hota": 0.3154949081000152,
+          "iou_threshold": 0.95,
+          "localization_accuracy": 1.0,
+          "true_positives": 5
+        }
+      ],
+      "identity_false_negatives": 9,
+      "identity_false_positives": 4,
+      "identity_true_positives": 5,
+      "idf1": 0.43478260869565216,
+      "idf1_match_iou": 0.5,
+      "localization_accuracy": 1.0,
+      "schema_version": "cvbench.mot-metrics/v1",
+      "tracker_detections": 9,
+      "tracker_tracks": 3
+    },
+    "multi_target": {
+      "1": {
+        "coverage": 0.35714285714285715,
+        "eligible": 14,
+        "matched": 5
+      }
+    },
+    "reacquisition": {
+      "after_feed_interruption_rate": null,
+      "after_full_occlusion_rate": 1.0,
+      "after_visible_detector_dropout_rate": null,
+      "by_gap": [
+        {
+          "confidence_decreased": false,
+          "correct_target": true,
+          "full_occlusion": true,
+          "gap_duration_ms": 200.0,
+          "gap_position_error_px": {
+            "maximum": 0.0,
+            "median": 0.0,
+            "p90": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "sample_count": 2
+          },
+          "latency_ms": 180.0,
+          "same_id": true,
+          "same_id_preserved_during_gap": true,
+          "sequence_id": "reacquisition",
+          "swapped_with_target_id": null,
+          "target_id": "gt-1",
+          "track_remained_active": true,
+          "wrong_target_association": false
+        }
+      ],
+      "correct_target_rate": 1.0,
+      "events": 1,
+      "latency_ms": {
+        "maximum": 180.0,
+        "median": 180.0,
+        "p90": 180.0,
+        "p95": 180.0,
+        "p99": 180.0,
+        "sample_count": 1
+      },
+      "same_id_rate": 1.0
+    },
+    "robustness": {
+      "feed_faults": {},
+      "occlusion_survival": {
+        "by_gap": [
+          {
+            "confidence_decreased": false,
+            "correct_target": true,
+            "full_occlusion": true,
+            "gap_duration_ms": 200.0,
+            "gap_position_error_px": {
+              "maximum": 0.0,
+              "median": 0.0,
+              "p90": 0.0,
+              "p95": 0.0,
+              "p99": 0.0,
+              "sample_count": 2
+            },
+            "latency_ms": 180.0,
+            "same_id": true,
+            "same_id_preserved_during_gap": true,
+            "sequence_id": "reacquisition",
+            "swapped_with_target_id": null,
+            "target_id": "gt-1",
+            "track_remained_active": true,
+            "wrong_target_association": false
+          }
+        ],
+        "events": 1,
+        "same_id_preserved_rate": 1.0,
+        "track_active_rate": 1.0,
+        "wrong_target_associations": 0
+      }
+    },
+    "sample_counts": {
+      "continuity_matches": 7,
+      "ground_truth_records": 16,
+      "matches": 5,
+      "neutral_ignored_predictions": 0,
+      "output_records": 9
+    },
+    "visible_dropouts": {
+      "count": 3,
+      "exceeding_ms": {
+        "100": 2,
+        "1000": 0,
+        "250": 1,
+        "500": 0
+      },
+      "maximum": 350.0,
+      "median": 180.0,
+      "p90": 316.0,
+      "p95": 332.99999999999994,
+      "p99": 346.6,
+      "per_target_minute": 30.354131534569984,
+      "sample_count": 3
+    }
+  },
+  "mode": "online_replay",
+  "outcome": {
+    "exit_code": 0,
+    "status": "completed"
+  },
+  "provenance": {
+    "comparison_fingerprint": "golden",
+    "external_clock": "time.monotonic_ns"
+  },
+  "resources": {
+    "average_cpu_percent": 5.0,
+    "peak_ram_bytes": 1024,
+    "sample_count": 1
+  },
+  "run_id": "golden-known-scenario",
+  "runtime_isolation": {
+    "runtime": "local",
+    "status": "not_enforced_local"
+  },
+  "schema_version": "cvbench.report/v1",
+  "started_at": "2026-01-01T00:00:00+00:00",
+  "system": {
+    "id": "fixture",
+    "revision": "known",
+    "runtime": "local"
+  }
+}

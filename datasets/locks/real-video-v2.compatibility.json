@@ -1,0 +1,11 @@
+{
+  "schema_version": "cvbench.dataset-compatibility-lock/v1",
+  "dataset_id": "real-video-v2",
+  "version": "2.0.0",
+  "fixture_path": "scenarios/real-video-v2",
+  "install_path": "data/real-video-v2",
+  "archives_manifest_sha256": "35bf088a45dbaa2ea4890650c88d94bd0edb2eb915807147e8b19d9cbe144dce",
+  "frame_manifest_sha256": "636a3f0224d15a9c4b62ccca79266922364343226b93bd38a1e630777a8de0a9",
+  "corpus_fingerprint": "636a3f0224d15a9c4b62ccca79266922364343226b93bd38a1e630777a8de0a9",
+  "status": "legacy_runtime_compatibility_only"
+}

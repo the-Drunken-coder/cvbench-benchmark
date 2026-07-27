@@ -1,0 +1,9 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY pyproject.toml README.md LICENSE /app/
+COPY src /app/src
+COPY schemas /app/schemas
+RUN pip install --no-cache-dir .
+RUN groupadd --system cvbench && useradd --system --gid cvbench --home-dir /nonexistent cvbench
+USER cvbench
+CMD ["python", "-m", "cvbench.examples.good_tracker"]

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cvbench.dev/schemas/frame-v1.schema.json",
+  "title": "CVBench progressive frame metadata v1",
+  "$defs": {
+    "nativeSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frame_count", "duration_seconds", "nominal_fps", "timestamp_origin"],
+      "properties": {
+        "frame_count": {"type": "integer", "minimum": 1},
+        "duration_seconds": {"type": "number", "minimum": 0},
+        "nominal_fps": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "timestamp_origin": {"const": "scenario-relative nanoseconds"}
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "event",
+        "sequence_id",
+        "timing_compute_contract",
+        "delivery_policy",
+        "replay_profile",
+        "replay_rate",
+        "native_source"
+      ],
+      "properties": {
+        "schema_version": {"const": "cvbench.frame/v1"},
+        "event": {"const": "stream_start"},
+        "sequence_id": {"type": "string", "minLength": 1},
+        "timing_compute_contract": {"const": "cvbench.timing-compute/v1"},
+        "delivery_policy": {"const": "cvbench.delivery-lossless/v1"},
+        "replay_profile": {
+          "enum": ["quarter-speed", "half-speed", "native", "accelerated-test-20x", "accelerated-test-100x"]
+        },
+        "replay_rate": {"enum": [0.25, 0.5, 1, 20, 100]},
+        "native_source": {"$ref": "#/$defs/nativeSource"}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "event",
+        "sequence_id",
+        "frame_index",
+        "source_timestamp_ns",
+        "native_source_timestamp_ns",
+        "width",
+        "height",
+        "pixel_format",
+        "payload_encoding"
+      ],
+      "properties": {
+        "schema_version": {"const": "cvbench.frame/v1"},
+        "event": {"const": "frame"},
+        "sequence_id": {"type": "string", "minLength": 1},
+        "frame_index": {"type": "integer", "minimum": 0},
+        "source_timestamp_ns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Run-scoped causal frame identity echoed by outputs. It preserves native cadence but is not the online latency origin when replay pace differs."
+        },
+        "native_source_timestamp_ns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Immutable scenario-relative native source timestamp used for provenance and source-duration normalization."
+        },
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "pixel_format": {"const": "rgb24"},
+        "payload_encoding": {"const": "jpeg"},
+        "duplicate": {"type": "boolean"}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "sequence_id"],
+      "properties": {
+        "schema_version": {"const": "cvbench.frame/v1"},
+        "event": {"const": "stream_end"},
+        "sequence_id": {"type": "string", "minLength": 1}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event", "sequence_id", "source_timestamp_ns"],
+      "properties": {
+        "schema_version": {"const": "cvbench.frame/v1"},
+        "event": {"enum": ["feed_interruption_start", "feed_interruption_end"]},
+        "sequence_id": {"type": "string", "minLength": 1},
+        "source_timestamp_ns": {"type": "integer", "minimum": 0}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "event"],
+      "properties": {
+        "schema_version": {"const": "cvbench.frame/v1"},
+        "event": {"const": "benchmark_end"}
+      }
+    }
+  ]
+}

@@ -1,0 +1,959 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cvbench.dev/schemas/report-v1.schema.json",
+  "title": "CVBench benchmark report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "started_at",
+    "mode",
+    "benchmark",
+    "system",
+    "outcome",
+    "feed",
+    "timing",
+    "metrics",
+    "resources",
+    "leaderboard",
+    "runtime_isolation",
+    "findings",
+    "comparison",
+    "provenance",
+    "diagnostics",
+    "limitations",
+    "audit_evidence"
+  ],
+  "properties": {
+    "schema_version": {"const": "cvbench.report/v1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "format": "date-time"},
+    "mode": {"enum": ["online_replay", "offline_debug"]},
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "runtime", "command"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "runtime": {"enum": ["docker", "local"]},
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "outcome": {"$ref": "#/$defs/outcome"},
+    "feed": {"$ref": "#/$defs/feed"},
+    "timing": {"$ref": "timing-compute-v1.schema.json"},
+    "metrics": {"$ref": "#/$defs/metrics"},
+    "resources": {"$ref": "#/$defs/resources"},
+    "leaderboard": {"$ref": "#/$defs/leaderboard"},
+    "runtime_isolation": {"$ref": "#/$defs/runtimeIsolation"},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "comparison": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/comparison"}
+    },
+    "provenance": {"$ref": "#/$defs/provenance"},
+    "diagnostics": {"$ref": "#/$defs/diagnostics"},
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "audit_evidence": {"$ref": "#/$defs/auditEvidence"},
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "commit", "workflow_run_url", "workflow_name"],
+      "properties": {
+        "schema_version": {"const": "cvbench.runner/v1"},
+        "commit": {"type": ["string", "null"], "minLength": 1, "maxLength": 64},
+        "workflow_run_url": {"type": ["string", "null"], "format": "uri"},
+        "workflow_name": {"type": ["string", "null"], "minLength": 1, "maxLength": 256}
+      }
+    }
+  },
+  "$defs": {
+    "nullableNumber": {"type": ["number", "null"]},
+    "nonNegativeNumber": {"type": "number", "minimum": 0},
+    "nullableNonNegativeNumber": {"type": ["number", "null"], "minimum": 0},
+    "stringArray": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "outcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "exit_code",
+            "startup_time_ms",
+            "time_to_first_output_ms",
+            "errors",
+            "resolved_image",
+            "timed_out",
+            "crashed"
+          ],
+          "properties": {
+            "status": {"const": "completed"},
+            "exit_code": {"const": 0},
+            "startup_time_ms": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+            "time_to_first_output_ms": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+            "errors": {"type": "array", "maxItems": 0},
+            "resolved_image": {"type": ["string", "null"]},
+            "timed_out": {"const": false},
+            "crashed": {"const": false}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "exit_code",
+            "startup_time_ms",
+            "time_to_first_output_ms",
+            "errors",
+            "resolved_image",
+            "timed_out",
+            "crashed"
+          ],
+          "properties": {
+            "status": {"const": "failed"},
+            "exit_code": {"type": ["integer", "null"]},
+            "startup_time_ms": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+            "time_to_first_output_ms": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+            "errors": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "resolved_image": {"type": ["string", "null"]},
+            "timed_out": {"type": "boolean"},
+            "crashed": {"type": "boolean"}
+          }
+        }
+      ]
+    },
+    "feed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delivered_frames",
+        "dropped_frames",
+        "duplicate_frames",
+        "black_frames",
+        "feed_interruptions",
+        "delayed_frames",
+        "input_queue_depth",
+        "input_queue_depth_available"
+      ],
+      "properties": {
+        "delivered_frames": {"type": "integer", "minimum": 0},
+        "dropped_frames": {"type": "integer", "minimum": 0},
+        "duplicate_frames": {"type": "integer", "minimum": 0},
+        "black_frames": {"type": "integer", "minimum": 0},
+        "feed_interruptions": {"type": "integer", "minimum": 0},
+        "delayed_frames": {"type": "integer", "minimum": 0},
+        "input_queue_depth": {"type": "null"},
+        "input_queue_depth_available": {"const": false}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_counts",
+        "acquisition",
+        "coverage",
+        "visible_dropouts",
+        "localization",
+        "identity",
+        "false_detections",
+        "reacquisition",
+        "latency",
+        "multi_target",
+        "multi_object_tracking",
+        "robustness",
+        "long_running_stability"
+      ],
+      "properties": {
+        "sample_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ground_truth_records",
+            "output_records",
+            "matches",
+            "continuity_matches",
+            "neutral_ignored_predictions"
+          ],
+          "properties": {
+            "ground_truth_records": {"type": "integer", "minimum": 0},
+            "output_records": {"type": "integer", "minimum": 0},
+            "matches": {"type": "integer", "minimum": 0},
+            "continuity_matches": {"type": "integer", "minimum": 0},
+            "neutral_ignored_predictions": {"type": "integer", "minimum": 0}
+          }
+        },
+        "acquisition": {"$ref": "#/$defs/metricGroup"},
+        "coverage": {"$ref": "#/$defs/metricGroup"},
+        "visible_dropouts": {"$ref": "#/$defs/metricGroup"},
+        "localization": {"$ref": "#/$defs/metricGroup"},
+        "identity": {"$ref": "#/$defs/metricGroup"},
+        "false_detections": {"$ref": "#/$defs/metricGroup"},
+        "reacquisition": {"$ref": "#/$defs/metricGroup"},
+        "latency": {"$ref": "#/$defs/metricGroup"},
+        "multi_target": {"$ref": "#/$defs/metricGroup"},
+        "multi_object_tracking": {"$ref": "#/$defs/metricGroup"},
+        "robustness": {"$ref": "#/$defs/metricGroup"},
+        "long_running_stability": {"$ref": "#/$defs/metricGroup"}
+      }
+    },
+    "metricGroup": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/metricValue"}
+    },
+    "metricValue": {
+      "oneOf": [
+        {"type": ["number", "string", "boolean", "null"]},
+        {
+          "type": "array",
+          "items": {"$ref": "#/$defs/metricValue"}
+        },
+        {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/metricValue"}
+        }
+      ]
+    },
+    "accountingAvailability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "external_cgroup_v2",
+        "final_cumulative_cpu_sample",
+        "cpu_time",
+        "cpu_percent",
+        "peak_ram",
+        "disk_io"
+      ],
+      "properties": {
+        "external_cgroup_v2": {"type": "boolean"},
+        "final_cumulative_cpu_sample": {"type": "boolean"},
+        "cpu_time": {"type": "boolean"},
+        "cpu_percent": {"type": "boolean"},
+        "peak_ram": {"type": "boolean"},
+        "disk_io": {"type": "boolean"}
+      }
+    },
+    "resourceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_count",
+        "average_cpu_percent",
+        "peak_ram_bytes",
+        "cpu_time_delta_seconds"
+      ],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 0},
+        "average_cpu_percent": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "peak_ram_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "cpu_time_delta_seconds": {"$ref": "#/$defs/nullableNonNegativeNumber"}
+      }
+    },
+    "resourceSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "elapsed_ms",
+        "cpu_percent",
+        "cpu_time_seconds",
+        "memory_bytes",
+        "gpu_percent",
+        "vram_bytes",
+        "disk_read_bytes",
+        "disk_write_bytes",
+        "network_rx_bytes",
+        "network_tx_bytes",
+        "process_count",
+        "thread_count",
+        "phase",
+        "scenario",
+        "target_count",
+        "fault_injection"
+      ],
+      "properties": {
+        "elapsed_ms": {"$ref": "#/$defs/nonNegativeNumber"},
+        "cpu_percent": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "cpu_time_seconds": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "memory_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "memory_limit_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "memory_peak_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "gpu_percent": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "vram_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "disk_read_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "disk_write_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "network_rx_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "network_tx_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "process_count": {"type": ["integer", "null"], "minimum": 0},
+        "thread_count": {"type": ["integer", "null"], "minimum": 0},
+        "phase": {"type": "string", "minLength": 1},
+        "scenario": {"type": ["string", "null"]},
+        "target_count": {"type": ["integer", "null"], "minimum": 0},
+        "fault_injection": {"type": "boolean"},
+        "accounting_source": {"const": "host_cgroup_v2"},
+        "final_cumulative": {"type": "boolean"}
+      }
+    },
+    "gpuAccounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "isolated", "authoritative", "note"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "isolated": {"type": "boolean"},
+        "authoritative": {"type": "boolean"},
+        "note": {"type": "string"}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_count",
+        "runtime_seconds",
+        "average_cpu_percent",
+        "peak_cpu_percent",
+        "cpu_time_seconds",
+        "cpu_seconds_per_native_source_second",
+        "average_ram_bytes",
+        "peak_ram_bytes",
+        "gpu_available",
+        "peak_vram_bytes",
+        "gpu_accounting",
+        "disk_read_bytes",
+        "disk_write_bytes",
+        "network_rx_bytes",
+        "network_tx_bytes",
+        "peak_process_count",
+        "peak_thread_count",
+        "memory_growth_bytes",
+        "by_scenario",
+        "by_target_count",
+        "by_phase",
+        "cpu_time_by_phase_seconds",
+        "fault_injection_samples",
+        "accounting_scope",
+        "accounting_availability",
+        "authoritative",
+        "over_time"
+      ],
+      "properties": {
+        "sample_count": {"type": "integer", "minimum": 0},
+        "runtime_seconds": {"$ref": "#/$defs/nonNegativeNumber"},
+        "average_cpu_percent": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "peak_cpu_percent": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "cpu_time_seconds": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "cpu_seconds_per_native_source_second": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "average_ram_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "peak_ram_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "gpu_available": {"type": "boolean"},
+        "peak_vram_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "gpu_accounting": {"$ref": "#/$defs/gpuAccounting"},
+        "disk_read_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "disk_write_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "network_rx_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "network_tx_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "peak_process_count": {"type": ["integer", "null"], "minimum": 0},
+        "peak_thread_count": {"type": ["integer", "null"], "minimum": 0},
+        "memory_growth_bytes": {"$ref": "#/$defs/nullableNumber"},
+        "by_scenario": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/resourceSummary"}
+        },
+        "by_target_count": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/resourceSummary"}
+        },
+        "by_phase": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/resourceSummary"}
+        },
+        "cpu_time_by_phase_seconds": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/nullableNonNegativeNumber"}
+        },
+        "fault_injection_samples": {"type": "integer", "minimum": 0},
+        "accounting_scope": {
+          "enum": ["container_cgroup_v2_external", "local_process_tree_best_effort"]
+        },
+        "accounting_availability": {"$ref": "#/$defs/accountingAvailability"},
+        "authoritative": {"type": "boolean"},
+        "over_time": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/resourceSample"}
+        }
+      }
+    },
+    "rawAxisAccuracy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acquisition_rate", "observed_coverage", "mean_iou", "hota", "idf1"],
+      "properties": {
+        "acquisition_rate": {"$ref": "#/$defs/nullableNumber"},
+        "observed_coverage": {"$ref": "#/$defs/nullableNumber"},
+        "mean_iou": {"$ref": "#/$defs/nullableNumber"},
+        "hota": {"$ref": "#/$defs/nullableNumber"},
+        "idf1": {"$ref": "#/$defs/nullableNumber"}
+      }
+    },
+    "rawAxisEfficiency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpu_seconds_per_native_source_second",
+        "real_time_factor",
+        "peak_ram_bytes",
+        "disk_read_bytes",
+        "disk_write_bytes"
+      ],
+      "properties": {
+        "cpu_seconds_per_native_source_second": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "real_time_factor": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "peak_ram_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "disk_read_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"},
+        "disk_write_bytes": {"$ref": "#/$defs/nullableNonNegativeNumber"}
+      }
+    },
+    "leaderboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_version",
+        "ranking_method",
+        "composite_score",
+        "class_id",
+        "replay_class",
+        "compute_tier",
+        "completion_tier",
+        "eligible",
+        "disqualifications",
+        "raw_axes",
+        "comparison_rule"
+      ],
+      "properties": {
+        "policy_version": {"const": "cvbench.pareto/v1"},
+        "ranking_method": {"const": "pareto"},
+        "composite_score": {"type": "null"},
+        "class_id": {"type": ["string", "null"], "minLength": 1},
+        "replay_class": {"type": "string", "minLength": 1},
+        "compute_tier": {"type": "string", "minLength": 1},
+        "completion_tier": {"type": "string", "minLength": 1},
+        "eligible": {"type": "boolean"},
+        "disqualifications": {"$ref": "#/$defs/stringArray"},
+        "raw_axes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["accuracy", "efficiency"],
+          "properties": {
+            "accuracy": {"$ref": "#/$defs/rawAxisAccuracy"},
+            "efficiency": {"$ref": "#/$defs/rawAxisEfficiency"}
+          }
+        },
+        "comparison_rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "resourceEnvelopeItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_limit", "memory_limit_mb", "network_access"],
+      "properties": {
+        "cpu_limit": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "memory_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "network_access": {"type": "boolean"}
+      }
+    },
+    "resourceEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["benchmark", "system"],
+      "properties": {
+        "benchmark": {"$ref": "#/$defs/resourceEnvelopeItem"},
+        "system": {"$ref": "#/$defs/resourceEnvelopeItem"}
+      }
+    },
+    "runBudgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_run_seconds",
+        "max_drain_seconds",
+        "max_output_records",
+        "max_output_line_bytes",
+        "max_total_output_bytes",
+        "max_output_records_per_second"
+      ],
+      "properties": {
+        "max_run_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "max_drain_seconds": {"$ref": "#/$defs/nonNegativeNumber"},
+        "max_output_records": {"type": "integer", "minimum": 1},
+        "max_output_line_bytes": {"type": "integer", "minimum": 1},
+        "max_total_output_bytes": {"type": "integer", "minimum": 1},
+        "max_output_records_per_second": {"type": "integer", "minimum": 1}
+      }
+    },
+    "isolationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_limit", "memory_limit_mb", "network_access"],
+      "properties": {
+        "cpu_limit": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "memory_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "network_access": {"type": "boolean"},
+        "memory_swap_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "pids_limit": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "isolationApplied": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_limit", "memory_limit_mb"],
+      "properties": {
+        "cpu_limit": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "memory_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "memory_swap_limit_mb": {"type": ["number", "null"], "exclusiveMinimum": 0},
+        "pids_limit": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "imageIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configured_reference",
+        "resolved_reference",
+        "resolved_image_id",
+        "executed_reference",
+        "executed_image_id"
+      ],
+      "properties": {
+        "configured_reference": {"type": ["string", "null"]},
+        "resolved_reference": {"type": ["string", "null"]},
+        "resolved_image_id": {"type": ["string", "null"]},
+        "executed_reference": {"type": ["string", "null"]},
+        "executed_image_id": {"type": ["string", "null"]}
+      }
+    },
+    "mount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "destination"],
+      "properties": {
+        "source": {"type": "string"},
+        "destination": {"type": "string"}
+      }
+    },
+    "socketAccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner_uid", "owner_gid", "directory_mode", "socket_mode"],
+      "properties": {
+        "owner_uid": {"type": "integer", "minimum": 0},
+        "owner_gid": {"type": "integer", "minimum": 0},
+        "directory_mode": {"type": "string"},
+        "socket_mode": {"type": "string"}
+      }
+    },
+    "runtimeIsolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime",
+        "requested",
+        "status",
+        "future_frame_isolation",
+        "ground_truth_access",
+        "repository_access",
+        "media_access",
+        "container_id",
+        "mounts",
+        "network_mode",
+        "applied",
+        "image_identity_verified",
+        "executed_container_user",
+        "container_user_alignment_verified",
+        "expected_container_user",
+        "socket_access",
+        "expected_mount",
+        "image_identity"
+      ],
+      "properties": {
+        "runtime": {"enum": ["docker", "local"]},
+        "requested": {"$ref": "#/$defs/isolationRequest"},
+        "status": {
+          "enum": ["verified", "not_enforced_local", "pending_verification", "verification_failed", "not_started"]
+        },
+        "future_frame_isolation": {"type": ["boolean", "null"]},
+        "ground_truth_access": {"type": ["boolean", "null"]},
+        "repository_access": {"type": ["boolean", "null"]},
+        "media_access": {"type": ["boolean", "null"]},
+        "container_id": {"type": ["string", "null"]},
+        "mounts": {
+          "type": ["array", "null"],
+          "items": {"$ref": "#/$defs/mount"}
+        },
+        "network_mode": {"type": ["string", "null"]},
+        "applied": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/isolationApplied"}
+          ]
+        },
+        "image_identity_verified": {"type": ["boolean", "null"]},
+        "executed_container_user": {"type": ["string", "null"]},
+        "container_user_alignment_verified": {"type": ["boolean", "null"]},
+        "expected_container_user": {"type": ["string", "null"]},
+        "socket_access": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/socketAccess"}
+          ]
+        },
+        "expected_mount": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/mount"}
+          ]
+        },
+        "image_identity": {"$ref": "#/$defs/imageIdentity"},
+        "error": {"type": "string", "minLength": 1}
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_id",
+        "category",
+        "severity",
+        "confidence",
+        "status",
+        "observation",
+        "interpretation",
+        "possible_causes",
+        "recommended_test"
+      ],
+      "properties": {
+        "finding_id": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1},
+        "severity": {"type": "string", "minLength": 1},
+        "confidence": {"type": "string", "minLength": 1},
+        "status": {"const": "confirmed"},
+        "observation": {"$ref": "#/$defs/metricGroup"},
+        "interpretation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["statement", "evidence"],
+          "properties": {
+            "statement": {"type": "string", "minLength": 1},
+            "evidence": {"$ref": "#/$defs/stringArray"}
+          }
+        },
+        "possible_causes": {"$ref": "#/$defs/stringArray"},
+        "recommended_test": {"type": "string", "minLength": 1}
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "baseline",
+        "candidate",
+        "delta",
+        "direction",
+        "confidence",
+        "sample_count"
+      ],
+      "properties": {
+        "metric": {"type": "string", "minLength": 1},
+        "baseline": {"$ref": "#/$defs/metricValue"},
+        "candidate": {"$ref": "#/$defs/metricValue"},
+        "delta": {"$ref": "#/$defs/nullableNumber"},
+        "direction": {"enum": ["inconclusive", "unchanged", "improvement", "regression"]},
+        "confidence": {"enum": ["low", "moderate", "high"]},
+        "sample_count": {"type": "integer", "minimum": 0},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "matching": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "minimum_iou",
+        "maximum_center_error_px",
+        "class_agnostic",
+        "ignore_match_iou"
+      ],
+      "properties": {
+        "algorithm": {"type": "string"},
+        "minimum_iou": {"type": "number"},
+        "maximum_center_error_px": {"type": "number"},
+        "class_agnostic": {"type": "boolean"},
+        "ignore_match_iou": {"type": "number"}
+      }
+    },
+    "evaluationOrder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_ids",
+        "mode",
+        "algorithm",
+        "seed",
+        "private_per_run",
+        "run_scoped_sequence_ids",
+        "public_calibration_note"
+      ],
+      "properties": {
+        "scenario_ids": {"$ref": "#/$defs/stringArray"},
+        "mode": {"enum": ["configured_seed", "private_per_run_fallback"]},
+        "algorithm": {"type": "string", "minLength": 1},
+        "seed": {"type": ["string", "number", "null"]},
+        "private_per_run": {"type": "boolean"},
+        "run_scoped_sequence_ids": {"const": true},
+        "public_calibration_note": {"type": "string", "minLength": 1}
+      }
+    },
+    "comparisonInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "benchmark_id",
+        "benchmark_version",
+        "input_mode",
+        "timing_compute_contract",
+        "delivery_policy",
+        "replay_profile",
+        "playback_rate",
+        "resource_envelope",
+        "run_budgets",
+        "accounting_availability",
+        "thresholds",
+        "evaluation_order",
+        "scenarios"
+      ],
+      "properties": {
+        "benchmark_id": {"type": "string", "minLength": 1},
+        "benchmark_version": {"type": "string", "minLength": 1},
+        "input_mode": {"enum": ["online_replay", "offline_debug"]},
+        "timing_compute_contract": {"const": "cvbench.timing-compute/v1"},
+        "delivery_policy": {"const": "cvbench.delivery-lossless/v1"},
+        "replay_profile": {"type": "string", "minLength": 1},
+        "playback_rate": {"type": "number", "exclusiveMinimum": 0},
+        "resource_envelope": {"$ref": "#/$defs/resourceEnvelope"},
+        "run_budgets": {"$ref": "#/$defs/runBudgets"},
+        "accounting_availability": {"$ref": "#/$defs/accountingAvailability"},
+        "thresholds": {"$ref": "#/$defs/metricGroup"},
+        "evaluation_order": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "algorithm", "seed"],
+          "properties": {
+            "mode": {"enum": ["configured_seed", "private_per_run_fallback"]},
+            "algorithm": {"type": "string", "minLength": 1},
+            "seed": {"type": ["string", "number", "null"]}
+          }
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/metricGroup"}
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "benchmark_path",
+        "benchmark_sha256",
+        "system_path",
+        "system_sha256",
+        "scenario_manifests",
+        "resolved_container_image",
+        "resolved_container_image_id",
+        "executed_container_image_id",
+        "command",
+        "system_command",
+        "matching",
+        "external_clock",
+        "timing_compute_contract",
+        "delivery_policy",
+        "replay_profile",
+        "replay_rate",
+        "leaderboard_class",
+        "comparison_fingerprint",
+        "comparison_inputs",
+        "resource_envelope",
+        "run_budgets",
+        "accounting_availability",
+        "evaluation_order",
+        "platform",
+        "raw_evidence_available",
+        "bounded_audit_evidence_sha256",
+        "bounded_audit_evidence_hash_algorithm"
+      ],
+      "properties": {
+        "benchmark_path": {"type": "string", "minLength": 1},
+        "benchmark_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "system_path": {"type": "string", "minLength": 1},
+        "system_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "scenario_manifests": {"$ref": "#/$defs/stringArray"},
+        "resolved_container_image": {"type": ["string", "null"]},
+        "resolved_container_image_id": {"type": ["string", "null"]},
+        "executed_container_image_id": {"type": ["string", "null"]},
+        "command": {"type": "string", "minLength": 1},
+        "system_command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "matching": {"$ref": "#/$defs/matching"},
+        "external_clock": {"const": "time.monotonic_ns"},
+        "timing_compute_contract": {"const": "cvbench.timing-compute/v1"},
+        "delivery_policy": {"const": "cvbench.delivery-lossless/v1"},
+        "replay_profile": {"type": "string", "minLength": 1},
+        "replay_rate": {"type": "number", "exclusiveMinimum": 0},
+        "leaderboard_class": {"type": ["string", "null"], "minLength": 1},
+        "comparison_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "comparison_inputs": {"$ref": "#/$defs/comparisonInputs"},
+        "resource_envelope": {"$ref": "#/$defs/resourceEnvelope"},
+        "run_budgets": {"$ref": "#/$defs/runBudgets"},
+        "accounting_availability": {"$ref": "#/$defs/accountingAvailability"},
+        "evaluation_order": {"$ref": "#/$defs/evaluationOrder"},
+        "platform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["os"],
+          "properties": {
+            "os": {"type": "string", "minLength": 1}
+          }
+        },
+        "raw_evidence_available": {"const": false},
+        "bounded_audit_evidence_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bounded_audit_evidence_hash_algorithm": {"type": "string", "minLength": 1}
+      }
+    },
+    "stderrCompaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "truncated",
+        "retention",
+        "original_lines",
+        "retained_lines",
+        "omitted_lines",
+        "original_utf8_bytes"
+      ],
+      "properties": {
+        "truncated": {"const": true},
+        "retention": {"const": "head_and_tail"},
+        "original_lines": {"type": "integer", "minimum": 0},
+        "retained_lines": {"type": "integer", "minimum": 0},
+        "omitted_lines": {"type": "integer", "minimum": 0},
+        "original_utf8_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collector_errors", "sut_stderr", "match_count"],
+      "properties": {
+        "collector_errors": {"$ref": "#/$defs/stringArray"},
+        "sut_stderr": {"$ref": "#/$defs/stringArray"},
+        "match_count": {"type": "integer", "minimum": 0},
+        "sut_stderr_compaction": {"$ref": "#/$defs/stderrCompaction"}
+      }
+    },
+    "auditEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "review_disposition",
+        "frame_samples",
+        "sampled_frame_count",
+        "source_frame_count",
+        "false_track_segments",
+        "false_track_segment_count",
+        "neutral_ignored_predictions",
+        "score_explanation",
+        "occlusion_and_reacquisition",
+        "timeline",
+        "resources_and_isolation",
+        "timing_compute",
+        "reproducibility",
+        "flags",
+        "serialized_byte_budget",
+        "budget_omitted"
+      ],
+      "properties": {
+        "schema_version": {"const": "cvbench.audit/v1"},
+        "review_disposition": {"type": "string", "minLength": 1},
+        "frame_samples": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/metricGroup"}
+        },
+        "sampled_frame_count": {"type": "integer", "minimum": 0},
+        "source_frame_count": {"type": "integer", "minimum": 0},
+        "false_track_segments": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/metricGroup"}
+        },
+        "false_track_segment_count": {"type": "integer", "minimum": 0},
+        "neutral_ignored_predictions": {"$ref": "#/$defs/metricGroup"},
+        "score_explanation": {"$ref": "#/$defs/metricGroup"},
+        "occlusion_and_reacquisition": {"$ref": "#/$defs/metricGroup"},
+        "timeline": {"$ref": "#/$defs/metricGroup"},
+        "resources_and_isolation": {"$ref": "#/$defs/metricGroup"},
+        "timing_compute": {"$ref": "#/$defs/metricGroup"},
+        "reproducibility": {"$ref": "#/$defs/metricGroup"},
+        "flags": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/metricGroup"}
+        },
+        "serialized_byte_budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_bytes", "truncated"],
+          "properties": {
+            "max_bytes": {"type": "integer", "minimum": 1},
+            "truncated": {"type": "boolean"}
+          }
+        },
+        "budget_omitted": {"$ref": "#/$defs/metricGroup"}
+      }
+    }
+  }
+}

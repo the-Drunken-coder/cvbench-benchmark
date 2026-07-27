@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  control-plane:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: control-plane
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: control-plane/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:preview
+      - run: npm run test:production-install
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e '.[dev]'
+      - run: ruff check .
+      - run: pytest
+      - run: cvbench validate --benchmark benchmarks/persistent-target-tracking.yaml --system systems/example-good-local.yaml
+
+  docker-scored-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install .
+      - run: docker build -f examples/Dockerfile.good -t cvbench-example-good:v1 .
+      - name: Fresh-checkout trusted-runner lifecycle
+        run: |
+          test ! -e data/real-video-v2
+          docker run -d --name cvbench-test-registry -p 5000:5000 registry:2
+          trap 'docker rm --force cvbench-test-registry >/dev/null 2>&1 || true' EXIT
+          docker tag cvbench-example-good:v1 localhost:5000/cvbench-example-good:v1
+          docker push localhost:5000/cvbench-example-good:v1
+          IMAGE=$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' localhost:5000/cvbench-example-good:v1 | grep '^localhost:5000/')
+          python scripts/fresh_checkout_runner_e2e.py "$IMAGE"
+      - run: cvbench run --benchmark benchmarks/persistent-target-tracking.yaml --system systems/example-good-docker.yaml --output docker-runs
+      - run: python scripts/assert_docker_report.py docker-runs
+      - name: Prove native-time pacing and cgroup compute accounting
+        run: |
+          cvbench run --benchmark benchmarks/timing-compute-evidence.yaml --system systems/example-good-docker.yaml --output pacing-fast-runs
+          cvbench run --benchmark benchmarks/timing-compute-evidence.yaml --system systems/pacing-cpu-heavy-docker.yaml --output pacing-cpu-heavy-runs
+          cvbench run --benchmark benchmarks/timing-compute-evidence.yaml --system systems/pacing-idle-docker.yaml --output pacing-idle-runs
+          cvbench run --benchmark benchmarks/timing-compute-evidence.yaml --system systems/pacing-background-child-docker.yaml --output pacing-background-child-runs
+          cvbench run --benchmark benchmarks/timing-compute-evidence.yaml --system systems/pacing-final-burst-docker.yaml --output pacing-final-burst-runs
+          python scripts/run_immediate_exit_e2e.py --output pacing-immediate-exit-runs
+          python scripts/assert_pacing_evidence.py \
+            --fast pacing-fast-runs \
+            --cpu-heavy pacing-cpu-heavy-runs \
+            --idle pacing-idle-runs \
+            --background-child pacing-background-child-runs \
+            --final-burst pacing-final-burst-runs \
+            --immediate-exit pacing-immediate-exit-runs \
+            --output timing-compute-docker-evidence.json
+      - name: Upload timing and compute Docker evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: timing-compute-docker-evidence
+          if-no-files-found: error
+          path: timing-compute-docker-evidence.json
+      - name: Assert no scored container remains
+        run: test -z "$(docker ps -aq --filter ancestor=cvbench-example-good:v1)"
+      - name: Prepare and score the isolated real-video tranche
+        run: |
+          python scripts/hydrate_real_video_corpus.py
+          cp data/real-video-v2/artifacts.sha256 /tmp/real-video-artifacts-run1.sha256
+          python scripts/hydrate_real_video_corpus.py
+          cmp -s /tmp/real-video-artifacts-run1.sha256 data/real-video-v2/artifacts.sha256
+          test "$(wc -l < scenarios/real-video-v2/expected-frame-sha256.txt)" -eq 450
+          docker build -f examples/Dockerfile.real-video-baseline -t cvbench-real-video-baseline:v2 .
+          cvbench run --benchmark benchmarks/real-video-v2.yaml --system systems/real-video-baseline-docker.yaml --output real-video-docker-runs
+          python scripts/assert_docker_report.py real-video-docker-runs --real-video
+          python scripts/sanitize_ci_report.py real-video-docker-runs real-video-docker-safe-runs
+          python scripts/verify_ci_evidence.py real-video-docker-safe-runs data/real-video-v2/artifacts.sha256
+          cvbench run --benchmark benchmarks/public-whole-system-v3.yaml --system systems/example-good-public-docker.yaml --output combined-docker-runs
+          python scripts/assert_docker_report.py combined-docker-runs --combined
+          python scripts/sanitize_ci_report.py combined-docker-runs combined-docker-safe-runs
+          python scripts/verify_ci_evidence.py combined-docker-safe-runs data/real-video-v2/artifacts.sha256
+          python scripts/evidence_hashes.py docker-evidence.sha256 \
+            real-video-docker-safe-runs/*/report.json \
+            real-video-docker-safe-runs/*/resources.csv \
+            combined-docker-safe-runs/*/report.json \
+            combined-docker-safe-runs/*/resources.csv \
+            data/real-video-v2/artifacts.sha256
+          python scripts/evidence_hashes.py docker-evidence.sha256 --verify
+      - name: Upload exact safe real-video and combined Docker evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-suite-docker-evidence
+          if-no-files-found: error
+          path: |
+            real-video-docker-safe-runs/*/report.json
+            real-video-docker-safe-runs/*/resources.csv
+            combined-docker-safe-runs/*/report.json
+            combined-docker-safe-runs/*/resources.csv
+            data/real-video-v2/artifacts.sha256
+            docker-evidence.sha256
+      - name: Assert no real-video container remains
+        if: ${{ always() && !cancelled() }}
+        run: test -z "$(docker ps -aq --filter ancestor=cvbench-real-video-baseline:v2)"

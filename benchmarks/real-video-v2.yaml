@@ -1,0 +1,48 @@
+schema_version: cvbench.benchmark/v1
+id: real-video-full-frame-mot
+version: 2.0.0
+
+input:
+  mode: online_replay
+  protocol: frame_socket_v1
+  replay_profile: native
+
+output:
+  protocol: jsonl
+  schema: cvbench.track/v1
+
+thresholds:
+  confirmed_track_min_duration_ms: 250
+  visible_dropout_tolerance_ms: 100
+  max_match_center_error_px: 35
+  minimum_match_iou: 0.3
+  ignore_match_iou: 0.5
+  acquisition_deadlines_ms: [100, 250, 500, 1000]
+  latency_deadline_ms: 250
+  high_confidence_threshold: 0.8
+  out_of_bounds: reject
+  class_agnostic: false
+
+# Every image pixel is scoreable. There are no target hints, ROIs, or ignore
+# rows. The system receives only each current frame and timestamp in sequence.
+scenarios:
+  - ../scenarios/real-video-v2/rvmot-a1c9/scenario.yaml
+  - ../scenarios/real-video-v2/rvmot-b7e2/scenario.yaml
+  - ../scenarios/real-video-v2/rvmot-c4f6/scenario.yaml
+
+resources:
+  cpu_limit: 4
+  memory_limit_mb: 2048
+  network_access: false
+
+reporting:
+  generate_json: true
+  generate_html: true
+  generate_failure_packets: false
+
+max_run_seconds: 45
+max_drain_seconds: 10
+max_output_records: 100000
+max_output_line_bytes: 1000000
+max_total_output_bytes: 50000000
+max_output_records_per_second: 10000

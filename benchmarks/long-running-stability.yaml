@@ -1,0 +1,56 @@
+schema_version: cvbench.benchmark/v1
+id: long-running-stability
+version: 1.0.0
+
+input:
+  mode: online_replay
+  protocol: frame_socket_v1
+  replay_profile: native
+
+thresholds:
+  visible_dropout_tolerance_ms: 100
+  max_match_center_error_px: 35
+  minimum_match_iou: 0.3
+
+# Concatenation is intentional: one SUT process sees repeated stream boundaries,
+# which exercises cleanup, ID growth, state contamination, drift, and recovery.
+scenarios:
+  - ../scenarios/synthetic-v1/resource_stress/scenario.yaml
+  - ../scenarios/synthetic-v1/track_id_churn/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_reacquisition/scenario.yaml
+  - ../scenarios/synthetic-v1/false_detection/scenario.yaml
+  - ../scenarios/synthetic-v1/resource_stress/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_reacquisition/scenario.yaml
+  - ../scenarios/synthetic-v1/false_detection/scenario.yaml
+  - ../scenarios/synthetic-v1/resource_stress/scenario.yaml
+  - ../scenarios/synthetic-v1/occlusion_reacquisition/scenario.yaml
+  - ../scenarios/synthetic-v1/false_detection/scenario.yaml
+  - ../scenarios/synthetic-v1/resource_stress/scenario.yaml
+
+resources:
+  cpu_limit: 4
+  memory_limit_mb: 2048
+  network_access: false
+
+reporting:
+  generate_json: true
+  generate_html: true
+  generate_failure_packets: true
+
+long_run_assertions:
+  max_unique_track_ids: 10000
+  min_distinct_physical_target_births: 40
+  max_track_id_reuse_events: 0
+  require_no_track_id_exhaustion: true
+  max_state_contamination_events: 0
+  max_false_positive_accumulation_per_camera_minute: 0
+  min_interruption_recovery_rate: 1.0
+  max_absolute_latency_drift_ms: 100
+  max_memory_growth_bytes: 268435456
+
+max_run_seconds: 60
+max_drain_seconds: 10
+max_output_records: 200000
+max_output_line_bytes: 1000000
+max_total_output_bytes: 100000000
+max_output_records_per_second: 10000

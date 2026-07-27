@@ -1,0 +1,22 @@
+schema_version: cvbench.system/v1
+id: intentionally-broken-tracker
+revision: v1-new-id-every-frame
+
+runtime:
+  type: local
+  command: ["{python}", "-m", "cvbench.examples.broken_tracker"]
+  environment:
+    PYTHONUNBUFFERED: "1"
+
+readiness:
+  type: stdout_pattern
+  pattern: CVBENCH_READY
+  timeout_seconds: 10
+
+shutdown:
+  grace_period_seconds: 5
+
+resources:
+  cpu_limit: 4
+  memory_limit_mb: 2048
+  network_access: false

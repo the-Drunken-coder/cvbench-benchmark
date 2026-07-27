@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cvbench-control-plane",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-21",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*", "/.well-known/*", "/scenario-catalog/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cvbench-control-plane",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "MAX_SUBMISSIONS_PER_HOUR": "20",
+    "LEASE_SECONDS": "3000"
+  }
+}

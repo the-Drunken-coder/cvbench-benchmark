@@ -1,0 +1,29 @@
+{
+  "name": "cvbench-control-plane",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-scenario-catalog.mjs",
+    "postinstall": "npm run build",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply cvbench-control-plane --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cvbench-control-plane --remote",
+    "test": "node --test test/*.test.js",
+    "test:d1": "node scripts/d1-lifecycle.mjs",
+    "test:preview": "node scripts/test-preview-routes.mjs",
+    "test:production-install": "node scripts/test-production-install.mjs",
+    "measure:playback": "npm run build && node scripts/measure-scenario-playback.mjs",
+    "screenshots": "npm run build && node scripts/capture-scenario-screenshots.mjs"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "playwright-core": "1.61.1",
+    "wrangler": "4.112.0"
+  }
+}
