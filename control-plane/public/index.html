@@ -45,7 +45,7 @@
         <div class="section-intro">
           <span class="section-number">01</span>
           <div><p class="kicker">What CVBench measures</p><h2>A leaderboard with receipts.</h2></div>
-          <p>Every public submission runs the declared 16-scenario Version 2 suite at native pace: 13 deterministic synthetic tests plus three exhaustive, full-frame, native-30-FPS real-video sequences. Native source time never changes. Accuracy, cgroup CPU-seconds per source-second, real-time factor, RAM, I/O, backlog, and deadline misses remain separate Pareto axes—there is no hidden blended score.</p>
+          <p>Every new public submission runs the declared 16-scenario Version 3 suite at native pace: the same 13 deterministic synthetic tests and three exhaustive, full-frame, native-30-FPS real-video sequences, now with 4 CPUs, 8 GiB RAM, and a 240-second run budget. Native source time never changes. Accuracy, cgroup CPU-seconds per source-second, real-time factor, RAM, I/O, backlog, and deadline misses remain separate Pareto axes—there is no hidden blended score.</p>
         </div>
         <div class="metric-grid">
           <article><span class="metric-index">A</span><h3>Accuracy</h3><p>Class-aware detection, HOTA, IDF1, localization, identity association, misses, and false tracks against frame-level ground truth.</p></article>
@@ -67,7 +67,7 @@
             <article><span>1</span><div><h3>Ship a digest</h3><p>Use a public or runner-accessible <code>linux/amd64</code> OCI image pinned as <code>registry/repo@sha256:…</code>. Tags are rejected.</p></div></article>
             <article><span>2</span><div><h3>Connect and become ready</h3><p>Your single- or multi-process system reads <code>CVBENCH_INPUT_SOCKET</code>, connects to the progressive socket, then prints exactly <code>CVBENCH_READY</code> as one stdout line.</p></div></article>
             <article><span>3</span><div><h3>Consume ordered frames</h3><p>The same Unix stream stays open for the sequence. Detector + tracker pipelines may retain temporal memory, association state, filtering, and post-processing. Messages contain lengths, JSON metadata, then JPEG bytes.</p></div></article>
-            <article><span>4</span><div><h3>Emit tracks</h3><p>Print one <code>cvbench.track/v1</code> JSON object per stdout line. Put logs on stderr. The envelope is one <code>linux/amd64</code> image, network disabled, 4 CPUs, 2048 MB, one socket-directory mount, no extra mounts, and no Docker socket.</p></div></article>
+            <article><span>4</span><div><h3>Emit tracks</h3><p>Print one <code>cvbench.track/v1</code> JSON object per stdout line. Put logs on stderr. The envelope is one <code>linux/amd64</code> image, network disabled, 4 CPUs, 8192 MB total memory, a 240-second run budget, one socket-directory mount, no extra mounts, and no Docker socket.</p></div></article>
           </div>
           <aside class="standard-card">
             <p class="card-label">STANDARD LAYOUT / V1</p>
@@ -84,7 +84,8 @@
 stdout                # protocol only
 stderr                # diagnostics
 network               # disabled
-CPU / memory           # 4 / 2048 MB</code></pre>
+CPU / memory           # 4 / 8192 MB
+maximum run time       # 240 seconds</code></pre>
             <a href="/api/v1/contract">Machine-readable contract →</a>
           </aside>
         </div>

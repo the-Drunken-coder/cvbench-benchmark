@@ -12,7 +12,7 @@ Build and run:
 
 ```bash
 docker build -f examples/Dockerfile.lite-mot -t cvbench-example-lite-mot:v1 .
-cvbench run --benchmark benchmarks/public-whole-system-v2.yaml \
+cvbench run --benchmark benchmarks/public-whole-system-v3.yaml \
   --system systems/example-lite-mot-docker.yaml --output runs/
 ```
 

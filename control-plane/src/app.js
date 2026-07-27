@@ -22,13 +22,23 @@ OPENAPI_REPORT_SCHEMA.properties.timing = { $ref: "#/components/schemas/TimingCo
 
 export const PUBLIC_BENCHMARK = Object.freeze({
   id: "public-whole-system-tracking",
-  version: "2.0.0",
-  manifest: "benchmarks/public-whole-system-v2.yaml",
+  version: "3.0.0",
+  manifest: "benchmarks/public-whole-system-v3.yaml",
   timing_compute_contract: "cvbench.timing-compute/v1",
   delivery_policy: "cvbench.delivery-lossless/v1",
   replay_profile: "native",
   replay_rate: 1,
   leaderboard_policy: "cvbench.pareto/v1",
+  resources: Object.freeze({ cpu_limit: 4, memory_limit_mb: 8192, network_access: false }),
+  container_guards: Object.freeze({ memory_swap_limit_mb: 8192, pids_limit: 512 }),
+  run_budgets: Object.freeze({
+    max_run_seconds: 240,
+    max_drain_seconds: 10,
+    max_output_records: 250000,
+    max_output_line_bytes: 1000000,
+    max_total_output_bytes: 100000000,
+    max_output_records_per_second: 10000,
+  }),
   scenario_count: 16,
   scenario_ids: Object.freeze([
     "synthetic-acquisition",
@@ -449,6 +459,16 @@ function sameNumber(left, right) {
   return Math.abs(left - right) <= Math.max(1e-9, Math.abs(left), Math.abs(right)) * 1e-9;
 }
 
+function samePublicScenarioSet(values) {
+  return (
+    Array.isArray(values)
+    && values.length === PUBLIC_BENCHMARK.scenario_ids.length
+    && values.every((value) => typeof value === "string")
+    && new Set(values).size === values.length
+    && canonicalJson([...values].sort()) === canonicalJson([...PUBLIC_BENCHMARK.scenario_ids].sort())
+  );
+}
+
 function validateAuthoritativeResources(resources, sourceDurationSeconds) {
   const samples = resources.over_time;
   if (!Array.isArray(samples) || samples.length < 1 || resources.sample_count !== samples.length) {
@@ -507,6 +527,21 @@ function validateSuccessfulReport(report) {
     || isolation.media_access !== false
     || isolation.image_identity_verified !== true
     || isolation.container_user_alignment_verified !== true
+    || !sameNumber(isolation.requested?.cpu_limit, PUBLIC_BENCHMARK.resources.cpu_limit)
+    || !sameNumber(isolation.requested?.memory_limit_mb, PUBLIC_BENCHMARK.resources.memory_limit_mb)
+    || isolation.requested?.network_access !== PUBLIC_BENCHMARK.resources.network_access
+    || !sameNumber(
+      isolation.requested?.memory_swap_limit_mb,
+      PUBLIC_BENCHMARK.container_guards.memory_swap_limit_mb,
+    )
+    || isolation.requested?.pids_limit !== PUBLIC_BENCHMARK.container_guards.pids_limit
+    || !sameNumber(isolation.applied?.cpu_limit, PUBLIC_BENCHMARK.resources.cpu_limit)
+    || !sameNumber(isolation.applied?.memory_limit_mb, PUBLIC_BENCHMARK.resources.memory_limit_mb)
+    || !sameNumber(
+      isolation.applied?.memory_swap_limit_mb,
+      PUBLIC_BENCHMARK.container_guards.memory_swap_limit_mb,
+    )
+    || isolation.applied?.pids_limit !== PUBLIC_BENCHMARK.container_guards.pids_limit
   ) return "A succeeded callback requires fully verified Docker isolation.";
 
   const timing = report.timing;
@@ -549,15 +584,24 @@ function validateSuccessfulReport(report) {
   ) return "report.leaderboard must be eligible with a non-null class and retained raw axes.";
 
   const provenance = report.provenance;
+  const comparisonInputs = provenance.comparison_inputs;
+  const comparisonScenarioIds = Array.isArray(comparisonInputs?.scenarios)
+    ? comparisonInputs.scenarios.map((scenario) => scenario?.id)
+    : null;
   if (
     !/^[0-9a-f]{64}$/.test(provenance.comparison_fingerprint || "")
     || provenance.leaderboard_class !== leaderboard.class_id
-    || provenance.resource_envelope.system?.cpu_limit !== 4
-    || provenance.resource_envelope.system?.memory_limit_mb !== 2048
-    || provenance.resource_envelope.system?.network_access !== false
-    || !finiteNumber(provenance.run_budgets.max_run_seconds, { positive: true })
-    || !finiteNumber(provenance.run_budgets.max_drain_seconds)
-    || !Number.isInteger(provenance.run_budgets.max_output_records)
+    || provenance.benchmark_path !== PUBLIC_BENCHMARK.manifest
+    || comparisonInputs?.benchmark_id !== PUBLIC_BENCHMARK.id
+    || comparisonInputs?.benchmark_version !== PUBLIC_BENCHMARK.version
+    || !samePublicScenarioSet(comparisonScenarioIds)
+    || !samePublicScenarioSet(provenance.evaluation_order?.scenario_ids)
+    || canonicalJson(comparisonInputs?.resource_envelope?.benchmark) !== canonicalJson(PUBLIC_BENCHMARK.resources)
+    || canonicalJson(comparisonInputs?.resource_envelope?.system) !== canonicalJson(PUBLIC_BENCHMARK.resources)
+    || canonicalJson(comparisonInputs?.run_budgets) !== canonicalJson(PUBLIC_BENCHMARK.run_budgets)
+    || canonicalJson(provenance.resource_envelope?.benchmark) !== canonicalJson(PUBLIC_BENCHMARK.resources)
+    || canonicalJson(provenance.resource_envelope?.system) !== canonicalJson(PUBLIC_BENCHMARK.resources)
+    || canonicalJson(provenance.run_budgets) !== canonicalJson(PUBLIC_BENCHMARK.run_budgets)
     || canonicalJson(provenance.accounting_availability) !== canonicalJson(accounting)
   ) return "report provenance, metrics, or audit evidence is incomplete.";
   if (
@@ -599,12 +643,45 @@ async function authoritativeReport(report) {
   };
 }
 
+function benchmarkForSubmission(value) {
+  const report = value.result;
+  if (!isObject(report?.benchmark)) return PUBLIC_BENCHMARK;
+  const provenance = isObject(report.provenance) ? report.provenance : {};
+  const comparisonInputs = isObject(provenance.comparison_inputs) ? provenance.comparison_inputs : {};
+  const requestedIsolation = isObject(report.runtime_isolation?.requested) ? report.runtime_isolation.requested : {};
+  const scenarioIds = Array.isArray(provenance.evaluation_order?.scenario_ids)
+    ? provenance.evaluation_order.scenario_ids
+    : PUBLIC_BENCHMARK.scenario_ids;
+  return {
+    ...PUBLIC_BENCHMARK,
+    id: report.benchmark.id,
+    version: report.benchmark.version,
+    manifest: typeof provenance.benchmark_path === "string" ? provenance.benchmark_path : PUBLIC_BENCHMARK.manifest,
+    timing_compute_contract: provenance.timing_compute_contract || PUBLIC_BENCHMARK.timing_compute_contract,
+    delivery_policy: provenance.delivery_policy || PUBLIC_BENCHMARK.delivery_policy,
+    replay_profile: provenance.replay_profile || PUBLIC_BENCHMARK.replay_profile,
+    replay_rate: provenance.replay_rate ?? PUBLIC_BENCHMARK.replay_rate,
+    leaderboard_policy: report.leaderboard?.policy_version || PUBLIC_BENCHMARK.leaderboard_policy,
+    resources: comparisonInputs.resource_envelope?.benchmark || PUBLIC_BENCHMARK.resources,
+    container_guards: finiteNumber(requestedIsolation.memory_swap_limit_mb, { positive: true })
+      && Number.isInteger(requestedIsolation.pids_limit)
+      ? {
+        memory_swap_limit_mb: requestedIsolation.memory_swap_limit_mb,
+        pids_limit: requestedIsolation.pids_limit,
+      }
+      : null,
+    run_budgets: comparisonInputs.run_budgets || PUBLIC_BENCHMARK.run_budgets,
+    scenario_count: scenarioIds.length,
+    scenario_ids: scenarioIds,
+  };
+}
+
 function publicSubmission(value) {
   return {
     id: value.id,
     status: value.status,
     model: { name: value.name, version: value.modelVersion, image: value.image, argv: value.argv },
-    benchmark: PUBLIC_BENCHMARK,
+    benchmark: benchmarkForSubmission(value),
     attempt: value.attempt,
     result: publicResultSummary(value.result, value),
     error: value.error,
@@ -636,7 +713,7 @@ function operatorSummary(value, comparisons = null) {
       lease_expires_at: iso(value.leaseExpiresAt),
     },
     provenance: {
-      benchmark: report?.benchmark || PUBLIC_BENCHMARK,
+      benchmark: benchmarkForSubmission(value),
       scenario_manifests: provenance.scenario_manifests || [],
       comparison_fingerprint: provenance.comparison_fingerprint || null,
       runner_commit: runner.commit || null,
@@ -1101,7 +1178,10 @@ export const CONTRACT = {
     environment: { CVBENCH_INPUT_SOCKET: "/run/cvbench/input.sock" },
     readiness: "Print exactly CVBENCH_READY as a stdout line after connecting.",
     output: "Then print one cvbench.track/v1 JSON object per stdout line; diagnostics go to stderr.",
-    resources: { cpus: 4, memory_mb: 2048 },
+    resources: {
+      cpus: PUBLIC_BENCHMARK.resources.cpu_limit,
+      memory_mb: PUBLIC_BENCHMARK.resources.memory_limit_mb,
+    },
   },
   submission: {
     accepted: ["image", "argv", "name", "model_version", "contact", "notes"],
@@ -1120,7 +1200,7 @@ export const CONTRACT = {
 
 export const OPENAPI = {
   openapi: "3.1.0",
-  info: { title: "CVBench Control Plane API", version: "1.0.0", description: "Submit one immutable linux/amd64 OCI image containing a complete vision system. Every v1 submission runs the fixed public-whole-system-tracking Version 2 suite of 13 synthetic and 3 dense full-frame real-video scenarios." },
+  info: { title: "CVBench Control Plane API", version: "1.0.0", description: "Submit one immutable linux/amd64 OCI image containing a complete vision system. Every v1 submission runs the fixed public-whole-system-tracking Version 3 suite of 13 synthetic and 3 dense full-frame real-video scenarios." },
   "x-cvbench-public-benchmark": PUBLIC_BENCHMARK,
   servers: [{ url: "/" }],
   paths: {

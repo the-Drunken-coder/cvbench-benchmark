@@ -89,7 +89,7 @@ def test_real_scenarios_are_full_frame_native_cadence_and_have_no_ignores() -> N
 
 
 def test_public_suite_includes_every_synthetic_and_replacement_real_scenario() -> None:
-    public = yaml.safe_load((ROOT / "benchmarks" / "public-whole-system-v2.yaml").read_text())
+    public = yaml.safe_load((ROOT / "benchmarks" / "public-whole-system-v3.yaml").read_text())
     declared = {
         yaml.safe_load((ROOT / "benchmarks" / relative).resolve().read_text())["id"]
         for relative in public["scenarios"]
@@ -99,7 +99,9 @@ def test_public_suite_includes_every_synthetic_and_replacement_real_scenario() -
         for path in (ROOT / "scenarios" / "synthetic-v1").glob("*/scenario.yaml")
     }
     assert public["id"] == "public-whole-system-tracking"
-    assert public["version"] == "2.0.0"
+    assert public["version"] == "3.0.0"
+    assert public["resources"] == {"cpu_limit": 4, "memory_limit_mb": 8192, "network_access": False}
+    assert public["max_run_seconds"] == 240
     assert declared == expected_synthetic | {clip["id"] for clip in CLIPS}
     assert len(declared) == 16
 

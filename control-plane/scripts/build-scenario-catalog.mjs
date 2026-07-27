@@ -31,7 +31,7 @@ const STATIC_FILES = [
 const BENCHMARK_FILES = [
   "benchmarks/long-running-stability.yaml",
   "benchmarks/persistent-target-tracking.yaml",
-  "benchmarks/public-whole-system-v2.yaml",
+  "benchmarks/public-whole-system-v3.yaml",
   "benchmarks/real-video-v2.yaml",
 ];
 const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".html", ".jpg", ".js", ".json"]);

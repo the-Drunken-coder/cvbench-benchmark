@@ -104,7 +104,7 @@ jobs:
           python scripts/assert_docker_report.py real-video-docker-runs --real-video
           python scripts/sanitize_ci_report.py real-video-docker-runs real-video-docker-safe-runs
           python scripts/verify_ci_evidence.py real-video-docker-safe-runs data/real-video-v2/artifacts.sha256
-          cvbench run --benchmark benchmarks/public-whole-system-v2.yaml --system systems/example-good-docker.yaml --output combined-docker-runs
+          cvbench run --benchmark benchmarks/public-whole-system-v3.yaml --system systems/example-good-public-docker.yaml --output combined-docker-runs
           python scripts/assert_docker_report.py combined-docker-runs --combined
           python scripts/sanitize_ci_report.py combined-docker-runs combined-docker-safe-runs
           python scripts/verify_ci_evidence.py combined-docker-safe-runs data/real-video-v2/artifacts.sha256

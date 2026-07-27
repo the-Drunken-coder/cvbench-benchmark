@@ -89,7 +89,7 @@ CPU tiers use CPU-seconds per native source-second: `cpu-1` (≤1), `cpu-2` (≤
 
 The comparison fingerprint binds the scenario corpus, timing/delivery policy, replay profile/rate, CPU and RAM envelope, run/drain/output budgets, and accounting availability. Only two eligible results with identical non-null fingerprints and identical non-null class IDs are equal-category comparisons. Within a class, one result Pareto-dominates another only when it is no worse on every declared raw axis and strictly better on at least one. Higher accuracy bought with more compute or slower completion therefore remains visible and cannot silently win an equal-budget category.
 
-The fixed public Docker envelope is still 4 CPUs, 2048 MiB RAM, no network, one owner-only socket mount, an unprivileged UID/GID, and an immutable image identity.
+The fixed public Version 3 Docker envelope is 4 CPUs, 8192 MiB total memory with swap disabled, a 512-process ceiling, no network, one owner-only socket mount, an unprivileged UID/GID, and an immutable image identity. The hard run deadline is 240 seconds; native source time, latency, backlog, and completion efficiency remain measured rather than normalized away.
 
 ## Evidence
 

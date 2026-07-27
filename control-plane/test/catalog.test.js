@@ -87,7 +87,7 @@ test("catalog equals the benchmark union and every published hash verifies", asy
   assert.equal(catalog.all_current_scenarios_public, true);
 
   const expected = new Set();
-  for (const filename of ["long-running-stability.yaml", "persistent-target-tracking.yaml", "public-whole-system-v2.yaml", "real-video-v2.yaml"]) {
+  for (const filename of ["long-running-stability.yaml", "persistent-target-tracking.yaml", "public-whole-system-v3.yaml", "real-video-v2.yaml"]) {
     const benchmarkPath = path.join(ROOT, "benchmarks", filename);
     const benchmark = parseYaml(await readFile(benchmarkPath, "utf8"));
     for (const declared of benchmark.scenarios) {

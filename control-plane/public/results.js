@@ -483,6 +483,34 @@ function resultShareUrl(id) {
   return url.toString();
 }
 
+function renderBenchmarkContract(benchmark) {
+  const section = element("section", undefined, "result-benchmark-contract");
+  section.append(
+    element("p", "Tested benchmark", "kicker"),
+    element("h3", `${benchmark?.id || "Unknown benchmark"} · Version ${benchmark?.version || "unknown"}`),
+  );
+  const axes = element("dl", undefined, "result-axes");
+  const memory = benchmark?.resources?.memory_limit_mb;
+  const values = [
+    ["Scenarios", benchmark?.scenario_count == null ? "Unavailable" : String(benchmark.scenario_count)],
+    ["CPU limit", benchmark?.resources?.cpu_limit == null ? "Unavailable" : `${benchmark.resources.cpu_limit} CPUs`],
+    ["Memory limit", memory == null ? "Unavailable" : `${formatNumber(memory / 1024, 0)} GiB`],
+    ["Maximum run", benchmark?.run_budgets?.max_run_seconds == null
+      ? "Unavailable"
+      : `${formatNumber(benchmark.run_budgets.max_run_seconds, 0)} seconds`],
+  ];
+  for (const [label, value] of values) axes.append(element("dt", label), element("dd", value));
+  section.append(
+    axes,
+    element(
+      "p",
+      "Scores are directly comparable only when both the comparison fingerprint and leaderboard class match.",
+      "benchmark-comparison-note",
+    ),
+  );
+  return section;
+}
+
 function renderSubmission(body) {
   pausePlayback();
   playbackGeneration += 1;
@@ -513,7 +541,7 @@ function renderSubmission(body) {
   header.append(identity, actions);
 
   const timeline = renderTimeline(body);
-  output.append(header, timeline);
+  output.append(header, renderBenchmarkContract(body.benchmark), timeline);
 
   const scores = body.result?.scores;
   if (scores) {
@@ -525,7 +553,7 @@ function renderSubmission(body) {
       element(
         "p",
         scores.leaderboard_eligible
-          ? "Eligible result with complete trusted-runner accounting."
+          ? "Eligible result with complete trusted-runner accounting. Equal-category comparison still requires the same benchmark fingerprint."
           : "This run is not eligible for leaderboard placement.",
       ),
     );

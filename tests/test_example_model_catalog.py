@@ -32,7 +32,7 @@ def test_learned_example_catalog_points_to_runnable_assets() -> None:
         assert (ROOT / dockerfile).is_file()
         system = yaml.safe_load((ROOT / manifest).read_text())
         assert system["runtime"]["command"] == ["python", "-m", module]
-        assert system["resources"]["network_access"] is False
+        assert system["resources"] == {"cpu_limit": 4, "memory_limit_mb": 8192, "network_access": False}
 
 
 def test_model_downloads_are_hash_pinned_and_weights_are_not_committed() -> None:

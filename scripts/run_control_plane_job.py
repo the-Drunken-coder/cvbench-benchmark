@@ -43,13 +43,23 @@ SECRET_ENVIRONMENT_KEYS = {
 }
 MAX_CALLBACK_BYTES = 1024 * 1024
 PUBLIC_BENCHMARK_ID = "public-whole-system-tracking"
-PUBLIC_BENCHMARK_VERSION = "2.0.0"
-PUBLIC_BENCHMARK_MANIFEST = "benchmarks/public-whole-system-v2.yaml"
+PUBLIC_BENCHMARK_VERSION = "3.0.0"
+PUBLIC_BENCHMARK_MANIFEST = "benchmarks/public-whole-system-v3.yaml"
 PUBLIC_TIMING_COMPUTE_CONTRACT = "cvbench.timing-compute/v1"
 PUBLIC_DELIVERY_POLICY = "cvbench.delivery-lossless/v1"
 PUBLIC_REPLAY_PROFILE = "native"
 PUBLIC_REPLAY_RATE = 1
 PUBLIC_LEADERBOARD_POLICY = "cvbench.pareto/v1"
+PUBLIC_RESOURCES = {"cpu_limit": 4, "memory_limit_mb": 8192, "network_access": False}
+PUBLIC_CONTAINER_GUARDS = {"memory_swap_limit_mb": 8192, "pids_limit": 512}
+PUBLIC_RUN_BUDGETS = {
+    "max_run_seconds": 240,
+    "max_drain_seconds": 10,
+    "max_output_records": 250000,
+    "max_output_line_bytes": 1000000,
+    "max_total_output_bytes": 100000000,
+    "max_output_records_per_second": 10000,
+}
 PUBLIC_SCENARIO_IDS = {
     "synthetic-acquisition",
     "synthetic-false-detection",
@@ -156,6 +166,9 @@ def validate_lease(lease: dict[str, Any]) -> tuple[dict[str, Any], str, int]:
         or benchmark.get("replay_profile") != PUBLIC_REPLAY_PROFILE
         or benchmark.get("replay_rate") != PUBLIC_REPLAY_RATE
         or benchmark.get("leaderboard_policy") != PUBLIC_LEADERBOARD_POLICY
+        or benchmark.get("resources") != PUBLIC_RESOURCES
+        or benchmark.get("container_guards") != PUBLIC_CONTAINER_GUARDS
+        or benchmark.get("run_budgets") != PUBLIC_RUN_BUDGETS
     ):
         raise ValueError("lease contains an unsupported benchmark assignment")
     if (
@@ -264,7 +277,7 @@ def write_system_config(path: Path, submission: dict[str, Any]) -> None:
         "runtime": {"type": "docker", "image": submission["image"], "command": submission["argv"]},
         "readiness": {"type": "stdout_pattern", "pattern": "CVBENCH_READY", "timeout_seconds": 30},
         "shutdown": {"grace_period_seconds": 10},
-        "resources": {"cpu_limit": 4, "memory_limit_mb": 2048, "network_access": False},
+        "resources": PUBLIC_RESOURCES,
     }
     path.write_text(json.dumps(config, indent=2) + "\n")
 
@@ -346,22 +359,52 @@ def execute_submission(repository: Path, submission: dict[str, Any], work: Path)
         benchmark = report.get("benchmark", {})
         if benchmark.get("id") != PUBLIC_BENCHMARK_ID or benchmark.get("version") != PUBLIC_BENCHMARK_VERSION:
             raise RuntimeError("benchmark report does not match the assigned public suite")
-        reported_scenarios = report.get("provenance", {}).get("comparison_inputs", {}).get("scenarios", [])
+        provenance = report.get("provenance", {})
+        comparison_inputs = provenance.get("comparison_inputs", {})
+        if (
+            provenance.get("benchmark_path") != PUBLIC_BENCHMARK_MANIFEST
+            or comparison_inputs.get("benchmark_id") != PUBLIC_BENCHMARK_ID
+            or comparison_inputs.get("benchmark_version") != PUBLIC_BENCHMARK_VERSION
+            or comparison_inputs.get("resource_envelope", {}).get("benchmark") != PUBLIC_RESOURCES
+            or comparison_inputs.get("resource_envelope", {}).get("system") != PUBLIC_RESOURCES
+            or comparison_inputs.get("run_budgets") != PUBLIC_RUN_BUDGETS
+            or provenance.get("resource_envelope", {}).get("benchmark") != PUBLIC_RESOURCES
+            or provenance.get("resource_envelope", {}).get("system") != PUBLIC_RESOURCES
+            or provenance.get("run_budgets") != PUBLIC_RUN_BUDGETS
+        ):
+            raise RuntimeError("benchmark report does not preserve the assigned public resource contract")
+        reported_scenarios = comparison_inputs.get("scenarios", [])
         reported_ids = (
             [scenario.get("id") for scenario in reported_scenarios]
             if isinstance(reported_scenarios, list)
             else []
         )
+        evaluation_ids = provenance.get("evaluation_order", {}).get("scenario_ids", [])
         if (
             not isinstance(reported_scenarios, list)
             or len(reported_scenarios) != len(PUBLIC_SCENARIO_IDS)
             or not all(isinstance(scenario, dict) for scenario in reported_scenarios)
             or len(set(reported_ids)) != len(reported_ids)
             or set(reported_ids) != PUBLIC_SCENARIO_IDS
+            or not isinstance(evaluation_ids, list)
+            or len(evaluation_ids) != len(PUBLIC_SCENARIO_IDS)
+            or len(set(evaluation_ids)) != len(evaluation_ids)
+            or set(evaluation_ids) != PUBLIC_SCENARIO_IDS
         ):
             raise RuntimeError("benchmark report scenario set does not match the assigned public suite")
         isolation = report.get("runtime_isolation", {})
-        if isolation.get("status") != "verified" or isolation.get("network_mode") != "none":
+        expected_applied = {
+            "cpu_limit": float(PUBLIC_RESOURCES["cpu_limit"]),
+            "memory_limit_mb": float(PUBLIC_RESOURCES["memory_limit_mb"]),
+            **PUBLIC_CONTAINER_GUARDS,
+        }
+        expected_requested = {**PUBLIC_RESOURCES, **PUBLIC_CONTAINER_GUARDS}
+        if (
+            isolation.get("status") != "verified"
+            or isolation.get("network_mode") != "none"
+            or isolation.get("requested") != expected_requested
+            or isolation.get("applied") != expected_applied
+        ):
             raise RuntimeError("benchmark did not verify the required container isolation")
         report["runner"] = {
             "schema_version": "cvbench.runner/v1",
