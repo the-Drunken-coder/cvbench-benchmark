@@ -33,4 +33,6 @@ test("D1 terminal success keeps the public succeeded status", async () => {
 
   assert.equal(completed, null);
   assert.equal(bindings[0], "succeeded");
+  assert.equal(bindings[8], "completed");
+  assert.equal(bindings[9], "Benchmark completed.");
 });

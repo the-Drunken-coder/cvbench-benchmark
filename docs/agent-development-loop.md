@@ -46,9 +46,9 @@ cvbench submit . --wait --json
 cvbench status SUBMISSION_ID --json
 ```
 
-`stdout` is reserved for the final JSON object when `--json` is used. Build,
-upload, and progress messages go to `stderr`. A failed terminal benchmark exits
-nonzero.
+With `--json`, `stdout` is reserved for the final JSON object. Without it, the
+CLI prints a compact human summary. Build, upload, and progress messages go to
+`stderr` in both modes. A failed terminal benchmark exits nonzero.
 
 Submission idempotency is derived from the archive digest, image ID, command,
 name, and version. Retrying an identical experiment cannot silently create a

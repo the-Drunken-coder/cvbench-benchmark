@@ -156,6 +156,7 @@ def validate_lease(lease: dict[str, Any]) -> tuple[dict[str, Any], str, int]:
     if transport.get("type") == "uploaded_oci" and (
         not re.fullmatch(r"[a-f0-9]{64}", str(transport.get("archive_sha256", "")))
         or not isinstance(transport.get("archive_size"), int)
+        or isinstance(transport.get("archive_size"), bool)
         or not 1 <= transport["archive_size"] <= 8 * 1024 * 1024 * 1024
         or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(transport.get("image_id", "")))
         or transport.get("download_path") != f"/api/v1/internal/submissions/{job_id}/artifact"

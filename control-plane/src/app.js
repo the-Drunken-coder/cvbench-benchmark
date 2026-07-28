@@ -12,6 +12,7 @@ const MAX_OPERATOR_NOTE_BYTES = 8 * 1024;
 const ARTIFACT_PART_BYTES = 16 * 1024 * 1024;
 const DEFAULT_MAX_ARTIFACT_BYTES = 8 * 1024 * 1024 * 1024;
 const MAX_ARTIFACT_PARTS = 1000;
+const MAX_ARTIFACT_BYTES = ARTIFACT_PART_BYTES * MAX_ARTIFACT_PARTS;
 const VALID_JOB_STATUSES = new Set(["queued", "running", "succeeded", "failed"]);
 const VALID_PROGRESS_STAGES = new Set([
   "runner_started",
@@ -99,7 +100,7 @@ export function createApp(options) {
       options.maxArtifactBytes,
       DEFAULT_MAX_ARTIFACT_BYTES,
       ARTIFACT_PART_BYTES,
-      64 * 1024 * 1024 * 1024,
+      MAX_ARTIFACT_BYTES,
     ),
   };
 
@@ -215,6 +216,7 @@ async function route(request, config) {
     const multipart = config.artifactBucket.resumeMultipartUpload(artifact.objectKey, artifact.multipartUploadId);
     const object = await multipart.complete(parts.map(({ partNumber, etag }) => ({ partNumber, etag })));
     if (object.size !== artifact.archiveSize) {
+      await config.store.abortArtifact({ id: artifact.id, now: unixTime() });
       await config.artifactBucket.delete(artifact.objectKey);
       return problem(422, "artifact_size_mismatch", "Completed object size does not match the declared archive.");
     }
@@ -576,11 +578,14 @@ function validateSubmission(value) {
   }
   const registryImage = typeof value.image === "string" && IMAGE_PATTERN.test(value.image);
   const artifactId = typeof value.artifact_id === "string" && ID_PATTERN.test(value.artifact_id);
-  if (registryImage === artifactId) {
-    return { error: "Provide exactly one immutable image or completed artifact_id." };
-  }
   if (value.image !== undefined && !registryImage) {
     return { error: "image must be a lowercase OCI reference pinned with @sha256:<64 lowercase hex characters>." };
+  }
+  if (value.artifact_id !== undefined && !artifactId) {
+    return { error: "artifact_id must be a valid UUID." };
+  }
+  if (registryImage === artifactId) {
+    return { error: "Provide exactly one immutable image or completed artifact_id." };
   }
   if (!Array.isArray(value.argv) || value.argv.length < 1 || value.argv.length > 32) {
     return { error: "argv must be an array containing 1-32 arguments." };
@@ -1614,14 +1619,23 @@ export const OPENAPI = {
       put: {
         operationId: "uploadArtifactPart",
         security: [{ submissionKey: [] }],
-        responses: { 201: { description: "Part retained" }, 422: { description: "Invalid part" } },
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "part_number", in: "path", required: true, schema: { type: "integer", minimum: 1, maximum: MAX_ARTIFACT_PARTS } },
+        ],
+        requestBody: {
+          required: true,
+          content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } },
+        },
+        responses: { 201: { description: "Part retained" }, 401: { description: "Unauthorized" }, 422: { description: "Invalid part" } },
       },
     },
     "/api/v1/artifacts/{id}/complete": {
       post: {
         operationId: "completeArtifactUpload",
         security: [{ submissionKey: [] }],
-        responses: { 200: { description: "Artifact ready for submission" }, 422: { description: "Incomplete upload" } },
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: { 200: { description: "Artifact ready for submission" }, 401: { description: "Unauthorized" }, 422: { description: "Incomplete upload" } },
       },
     },
     "/api/v1/submissions": {

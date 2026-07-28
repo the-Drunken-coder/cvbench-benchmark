@@ -48,6 +48,13 @@ export class MemoryStore {
     return clone(artifact);
   }
 
+  async abortArtifact({ id, now }) {
+    const artifact = this.artifacts.get(id);
+    if (!artifact || artifact.status !== "uploading") return null;
+    Object.assign(artifact, { status: "aborted", completedAt: now });
+    return clone(artifact);
+  }
+
   async createSubmission(row, maxPerHour) {
     const operation = this.createTail.then(() => this.createSubmissionAtomic(row, maxPerHour));
     this.createTail = operation.catch(() => {});

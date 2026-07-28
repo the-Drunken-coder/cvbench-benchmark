@@ -62,6 +62,12 @@ test("health and machine-readable metadata are public", async () => {
   assert.deepEqual(openapi["x-cvbench-public-benchmark"], PUBLIC_BENCHMARK);
   assert.match(openapi.components.schemas.CreateSubmission.properties.model_version.description, /submitted system version/);
   assert.ok(openapi.components.schemas.TimingComputeSummary);
+  assert.equal(openapi.paths["/api/v1/artifacts/{id}/parts/{part_number}"].put.parameters.length, 2);
+  assert.ok(
+    openapi.paths["/api/v1/artifacts/{id}/parts/{part_number}"].put
+      .requestBody.content["application/octet-stream"],
+  );
+  assert.equal(openapi.paths["/api/v1/artifacts/{id}/complete"].post.parameters[0].name, "id");
   assert.equal(openapi.components.schemas.TimingComputeSummary.additionalProperties, false);
   assert.deepEqual(
     openapi.components.schemas.TimingComputeSummary.properties.native_source_offset_p95_ms,
@@ -148,7 +154,15 @@ test("catalog assets keep honest status, MIME, and cache semantics", async () =>
 
 test("submission requires authentication and strict immutable input", async () => {
   assert.equal((await submit(validBody(), "idem-key-0001", "wrong")).status, 401);
-  assert.equal((await submit({ ...validBody(), image: "ghcr.io/example/tracker:latest" }, "idem-key-0001")).status, 422);
+  const mutable = await submit({ ...validBody(), image: "ghcr.io/example/tracker:latest" }, "idem-key-0001");
+  assert.equal(mutable.status, 422);
+  assert.match((await mutable.json()).error.message, /pinned with @sha256/);
+  const malformedArtifact = await submit(
+    { ...validBody(), image: undefined, artifact_id: "not-a-uuid" },
+    "idem-key-0001",
+  );
+  assert.equal(malformedArtifact.status, 422);
+  assert.match((await malformedArtifact.json()).error.message, /valid UUID/);
   assert.equal((await submit({ ...validBody(), command: "curl bad | sh" }, "idem-key-0001")).status, 422);
   assert.equal((await submit({ ...validBody(), argv: "python tracker.py" }, "idem-key-0001")).status, 422);
   assert.equal((await submit(validBody(), "short")).status, 400);
@@ -337,6 +351,43 @@ test("artifact upload creation is rate limited before abandoned multipart state 
   assert.equal(limited.status, 429);
   assert.equal(limited.headers.get("retry-after"), "3600");
   assert.equal(artifactBucket.uploads.size, 1);
+});
+
+test("artifact size mismatch becomes an aborted terminal upload", async () => {
+  const artifactBucket = new MemoryArtifactBucket(1);
+  const artifactApp = createApp({
+    store,
+    artifactBucket,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+  });
+  const archive = new TextEncoder().encode("archive");
+  const created = await requestFor(artifactApp, "/api/v1/artifacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      archive_sha256: await sha256("archive"),
+      archive_size: archive.byteLength,
+      image_id: `sha256:${"e".repeat(64)}`,
+      compression: "gzip",
+    }),
+  });
+  const artifact = await created.json();
+  await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/parts/1`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-length": String(archive.byteLength) },
+    body: archive,
+  });
+  const completed = await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/complete`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}` },
+  });
+  assert.equal(completed.status, 422);
+  assert.equal((await store.getArtifact(artifact.id)).status, "aborted");
+  assert.equal((await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/complete`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}` },
+  })).status, 409);
 });
 
 test("historical completed results retain their Version 2 benchmark envelope", async () => {
@@ -1480,9 +1531,10 @@ async function sha256(value) {
 }
 
 class MemoryArtifactBucket {
-  constructor() {
+  constructor(completedSizeOffset = 0) {
     this.uploads = new Map();
     this.objects = new Map();
+    this.completedSizeOffset = completedSizeOffset;
   }
 
   async createMultipartUpload(key) {
@@ -1511,7 +1563,7 @@ class MemoryArtifactBucket {
           offset += chunk.byteLength;
         }
         bucket.objects.set(key, bytes);
-        return { size };
+        return { size: size + bucket.completedSizeOffset };
       },
       async abort() {
         bucket.uploads.delete(`${key}:${uploadId}`);

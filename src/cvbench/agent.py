@@ -366,9 +366,11 @@ class ControlPlaneClient:
         submission_id: str,
         *,
         poll_seconds: float = 5,
+        timeout_seconds: float = 3600,
         progress: Callable[[dict[str, Any]], None] = lambda _record: None,
     ) -> dict[str, Any]:
         last_marker: tuple[Any, ...] | None = None
+        deadline = time.monotonic() + timeout_seconds
         while True:
             record = self.submission(submission_id)
             current = record.get("progress") or {}
@@ -383,6 +385,11 @@ class ControlPlaneClient:
                 last_marker = marker
             if record.get("status") in TERMINAL_STATUSES:
                 return record
+            if time.monotonic() >= deadline:
+                raise AgentSubmissionError(
+                    f"submission did not finish within {timeout_seconds:.0f}s; "
+                    f"follow it at {result_url(self.api_url, submission_id)}"
+                )
             time.sleep(max(1, poll_seconds))
 
     def request_json(

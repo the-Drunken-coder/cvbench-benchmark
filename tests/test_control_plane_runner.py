@@ -188,6 +188,12 @@ def test_validate_lease_revalidates_untrusted_control_plane_data() -> None:
     }
     with pytest.raises(ValueError, match="uploaded OCI"):
         validate_lease({"submission": broken_transport, "lease": {"token": "b" * 64}})
+    boolean_size = {
+        **uploaded_submission,
+        "transport": {**uploaded_submission["transport"], "archive_size": True},
+    }
+    with pytest.raises(ValueError, match="uploaded OCI"):
+        validate_lease({"submission": boolean_size, "lease": {"token": "b" * 64}})
 
     with pytest.raises(ValueError, match="argv"):
         validate_lease(

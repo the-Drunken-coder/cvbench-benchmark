@@ -63,6 +63,22 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_agent_output(result: dict[str, object], *, json_output: bool) -> None:
+    if json_output:
+        print(json.dumps(result, indent=2))
+        return
+    print(f"{result.get('status', 'unknown')}: {result.get('submission_id', 'unknown submission')}")
+    print(f"Result: {result.get('result_url', 'unavailable')}")
+    feedback = result.get("feedback")
+    if isinstance(feedback, dict) and feedback.get("summary"):
+        print(f"Feedback: {feedback['summary']}")
+    scores = result.get("scores")
+    if isinstance(scores, dict):
+        for key in ("observed_coverage", "mean_iou", "id_switches", "false_track_births", "latency_p99_ms"):
+            if key in scores:
+                print(f"{key}: {scores[key]}")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -138,13 +154,13 @@ def main(argv: list[str] | None = None) -> int:
                 wait=args.wait,
                 progress=lambda message: print(message, file=sys.stderr),
             )
-            print(json.dumps(result, indent=2))
+            _print_agent_output(result, json_output=args.json_output)
             if result["status"] == "failed":
                 return 1
         elif args.command == "status":
             client = ControlPlaneClient(args.api_url, "")
             result = agent_result(client.submission(args.submission_id), args.api_url)
-            print(json.dumps(result, indent=2))
+            _print_agent_output(result, json_output=args.json_output)
             if result["status"] == "failed":
                 return 1
         elif args.command == "scenarios" and args.scenario_command == "generate":

@@ -69,6 +69,15 @@ export class D1Store {
     return Number(changed.meta?.changes || 0) === 1 ? this.getArtifact(id) : null;
   }
 
+  async abortArtifact({ id, now }) {
+    const changed = await this.db.prepare(`UPDATE submission_artifacts
+      SET status = 'aborted', completed_at = ?
+      WHERE id = ? AND status = 'uploading'`)
+      .bind(now, id)
+      .run();
+    return Number(changed.meta?.changes || 0) === 1 ? this.getArtifact(id) : null;
+  }
+
   async createSubmission(row, maxPerHour) {
     const existing = await this.db
       .prepare("SELECT id, request_sha256 FROM submissions WHERE submitter_key_sha256 = ? AND idempotency_key = ?")
@@ -360,7 +369,7 @@ export class D1Store {
         now,
         status,
         status,
-        status,
+        status === "succeeded" ? "completed" : "failed",
         status === "succeeded" ? "Benchmark completed." : "Benchmark failed.",
         status,
         id,

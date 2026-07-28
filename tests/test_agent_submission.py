@@ -10,6 +10,7 @@ from cvbench.agent import (
     AgentProject,
     AgentSubmissionError,
     BuiltImage,
+    ControlPlaneClient,
     CredentialStore,
     ImageArchive,
     agent_result,
@@ -106,6 +107,13 @@ def test_agent_result_keeps_the_exact_public_record() -> None:
     assert output["error"] == "bad protocol"
     assert output["record"] == record
     assert json.loads(json.dumps(output)) == output
+
+
+def test_wait_has_a_bounded_deadline_and_keeps_the_result_link(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = ControlPlaneClient("https://cvbench.test", "")
+    monkeypatch.setattr(client, "submission", lambda _submission_id: {"status": "running"})
+    with pytest.raises(AgentSubmissionError, match=r"https://cvbench\.test/results/\?submission=submission-id"):
+        client.wait("submission-id", timeout_seconds=0)
 
 
 class FakeClient:
