@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cvbench-benchmark"
-version = "1.0.0"
-description = "Local-first black-box benchmarking for online computer-vision tracking systems"
+version = "1.1.0"
+description = "Agent-first black-box benchmarking for online computer-vision tracking systems"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}

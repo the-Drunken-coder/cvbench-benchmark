@@ -108,6 +108,31 @@ function renderTimeline(body) {
   return timeline;
 }
 
+function renderLiveProgress(body) {
+  const progress = body.progress || {};
+  const total = Number(progress.total || body.benchmark?.scenario_count || 0);
+  const completed = Math.min(total, Math.max(0, Number(progress.completed || 0)));
+  const fraction = total ? completed / total : 0;
+  const section = element("section", undefined, "run-progress");
+  const copy = element("div");
+  copy.append(
+    element("p", terminalStatuses.has(body.status) ? "Run record" : "Live trusted runner", "kicker"),
+    element("h3", progress.message || (body.status === "queued" ? "Waiting for a trusted runner." : body.status)),
+    element("p", `${progress.stage || body.status} · ${completed} of ${total || "?"} scenarios published`, "run-progress-detail"),
+  );
+  const meter = element("div", undefined, "run-progress-meter");
+  meter.setAttribute("role", "progressbar");
+  meter.setAttribute("aria-label", "Benchmark run progress");
+  meter.setAttribute("aria-valuemin", "0");
+  meter.setAttribute("aria-valuemax", String(total || 1));
+  meter.setAttribute("aria-valuenow", String(completed));
+  const fill = element("span");
+  fill.style.width = `${Math.round(fraction * 100)}%`;
+  meter.append(fill);
+  section.append(copy, meter);
+  return section;
+}
+
 function pausePlayback() {
   if (playback) playback.playing = false;
   clearTimeout(playbackTimer);
@@ -471,9 +496,59 @@ function renderFindings(findings) {
     const card = element("article", undefined, `finding-card severity-${finding.severity || "unknown"}`);
     const meta = element("p", `${finding.severity || "unrated"} · ${finding.category || "general"}`);
     card.append(meta, element("h4", finding.finding_id || "Finding"), element("p", finding.statement || "No public statement."));
+    if (finding.possible_causes?.length) {
+      const causes = element("ul", undefined, "finding-causes");
+      for (const cause of finding.possible_causes) causes.append(element("li", cause));
+      card.append(causes);
+    }
+    if (finding.recommended_test) {
+      const next = element("p", undefined, "finding-next-test");
+      next.append(element("strong", "Next test: "), finding.recommended_test);
+      card.append(next);
+    }
     list.append(card);
   }
   section.append(list);
+  return section;
+}
+
+function renderAgentFeedback(feedback) {
+  const section = element("section", undefined, "agent-feedback");
+  const copy = element("div");
+  const heading = {
+    iterate: "Use this run to choose the next change.",
+    fix_and_retry: "Fix the execution boundary, then retry.",
+    ready_for_comparison: "Ready for direct comparison.",
+  }[feedback?.verdict] || "Agent feedback";
+  copy.append(
+    element("p", "Agent iteration brief", "kicker"),
+    element("h3", heading),
+    element("p", feedback?.summary || "Structured agent feedback is unavailable for this historical result."),
+  );
+  const priorities = element("div", undefined, "iteration-priorities");
+  if (feedback?.priorities?.length) {
+    for (const priority of feedback.priorities) {
+      const card = element("article");
+      card.append(
+        element("p", `${priority.severity || "unrated"} · ${priority.finding_id || "benchmark finding"}`, "iteration-priority-meta"),
+        element("h4", priority.problem || "Review this benchmark finding."),
+      );
+      if (priority.possible_causes?.length) {
+        const causes = element("ul");
+        for (const cause of priority.possible_causes) causes.append(element("li", cause));
+        card.append(causes);
+      }
+      if (priority.next_test) {
+        const next = element("p", undefined, "iteration-next-test");
+        next.append(element("strong", "Run next: "), priority.next_test);
+        card.append(next);
+      }
+      priorities.append(card);
+    }
+  } else {
+    priorities.append(element("p", "No prioritized defects were generated for this run."));
+  }
+  section.append(copy, priorities);
   return section;
 }
 
@@ -541,7 +616,7 @@ function renderSubmission(body) {
   header.append(identity, actions);
 
   const timeline = renderTimeline(body);
-  output.append(header, renderBenchmarkContract(body.benchmark), timeline);
+  output.append(header, renderBenchmarkContract(body.benchmark), timeline, renderLiveProgress(body));
 
   const scores = body.result?.scores;
   if (scores) {
@@ -593,7 +668,13 @@ function renderSubmission(body) {
       ]),
     );
 
-    output.append(eligibility, renderPlayback(body), groups, renderFindings(body.result.findings || []));
+    output.append(
+      eligibility,
+      renderAgentFeedback(body.result.agent_feedback),
+      renderPlayback(body),
+      groups,
+      renderFindings(body.result.findings || []),
+    );
   } else {
     const pending = element("section", undefined, "result-pending");
     pending.append(
@@ -603,6 +684,7 @@ function renderSubmission(body) {
         ? "The public record is terminal."
         : "This page refreshes automatically while the job is queued or running."),
     );
+    if (body.agent_feedback) output.append(renderAgentFeedback(body.agent_feedback));
     output.append(pending);
   }
 

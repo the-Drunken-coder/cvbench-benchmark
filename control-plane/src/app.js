@@ -9,8 +9,21 @@ const MAX_RESULT_BYTES = 1024 * 1024;
 const MAX_PREDICTION_OVERLAY_BYTES = 1536 * 1024;
 const MAX_PREDICTION_OVERLAY_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_OPERATOR_NOTE_BYTES = 8 * 1024;
+const ARTIFACT_PART_BYTES = 16 * 1024 * 1024;
+const DEFAULT_MAX_ARTIFACT_BYTES = 8 * 1024 * 1024 * 1024;
+const MAX_ARTIFACT_PARTS = 1000;
 const VALID_JOB_STATUSES = new Set(["queued", "running", "succeeded", "failed"]);
+const VALID_PROGRESS_STAGES = new Set([
+  "runner_started",
+  "artifact_download",
+  "image_load",
+  "corpus_preparation",
+  "benchmark_running",
+  "publishing_playback",
+]);
 const IMAGE_PATTERN = /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?\/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const IMAGE_ID_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const REPORT_SCHEMA_AJV = new Ajv2020({ allErrors: true, strict: true, allowUnionTypes: true });
 addFormats(REPORT_SCHEMA_AJV);
@@ -74,6 +87,7 @@ export function createApp(options) {
   const config = {
     store: options.store,
     assets: options.assets,
+    artifactBucket: options.artifactBucket,
     submissionKeys: credentialScopesAreValid ? submissionKeys : [],
     runnerToken: credentialScopesAreValid ? runnerToken : "",
     operatorReadKeys: credentialScopesAreValid ? operatorReadKeys : [],
@@ -81,6 +95,12 @@ export function createApp(options) {
     maxSubmissionsPerHour: boundedInteger(options.maxSubmissionsPerHour, 20, 1, 1000),
     leaseSeconds: boundedInteger(options.leaseSeconds, 3000, 60, 7200),
     predictionOverlaysRequired: options.predictionOverlaysRequired !== false,
+    maxArtifactBytes: boundedInteger(
+      options.maxArtifactBytes,
+      DEFAULT_MAX_ARTIFACT_BYTES,
+      ARTIFACT_PART_BYTES,
+      64 * 1024 * 1024 * 1024,
+    ),
   };
 
   return {
@@ -110,6 +130,98 @@ async function route(request, config) {
   if (request.method === "GET" && url.pathname === "/api/v1/contract") return json(CONTRACT);
   if (request.method === "GET" && url.pathname === "/api/v1/openapi.json") return json(OPENAPI);
 
+  if (request.method === "POST" && url.pathname === "/api/v1/artifacts") {
+    const token = bearerToken(request);
+    if (!(await authorized(token, config.submissionKeys))) return unauthorized("submission API key");
+    if (!config.artifactBucket) return problem(503, "artifact_storage_unavailable", "Direct image upload is unavailable.");
+    const parsed = await readJson(request, MAX_SUBMISSION_BYTES);
+    if (parsed.error) return parsed.error;
+    const validation = validateArtifactCreate(parsed.value, config.maxArtifactBytes);
+    if (validation.error) return problem(422, "invalid_artifact", validation.error);
+    const id = crypto.randomUUID();
+    const submitterKeyHash = await sha256(token);
+    const objectKey = `agent-images/${submitterKeyHash.slice(0, 16)}/${id}.docker.tar.gz`;
+    const multipart = await config.artifactBucket.createMultipartUpload(objectKey, {
+      httpMetadata: { contentType: "application/gzip" },
+      customMetadata: {
+        archiveSha256: validation.value.archiveSha256,
+        imageId: validation.value.imageId,
+      },
+    });
+    try {
+      const artifact = await config.store.createArtifact({
+        id,
+        submitterKeyHash,
+        objectKey,
+        multipartUploadId: multipart.uploadId,
+        ...validation.value,
+        now: unixTime(),
+      }, config.maxSubmissionsPerHour);
+      if (!artifact) {
+        await multipart.abort().catch(() => {});
+        return problem(429, "rate_limited", "This credential has reached its hourly artifact-upload limit.", {
+          "retry-after": "3600",
+        });
+      }
+      return json(publicArtifact(artifact), 201);
+    } catch (error) {
+      await multipart.abort().catch(() => {});
+      throw error;
+    }
+  }
+
+  const artifactPartMatch = url.pathname.match(/^\/api\/v1\/artifacts\/([^/]+)\/parts\/(\d+)$/);
+  if (request.method === "PUT" && artifactPartMatch) {
+    const token = bearerToken(request);
+    if (!(await authorized(token, config.submissionKeys))) return unauthorized("submission API key");
+    const artifact = await ownedArtifact(config.store, artifactPartMatch[1], token);
+    if (!artifact || artifact.status !== "uploading") return problem(404, "artifact_not_found", "Upload not found.");
+    const partNumber = Number(artifactPartMatch[2]);
+    const byteCount = Number(request.headers.get("content-length") || 0);
+    if (
+      !Number.isInteger(partNumber)
+      || partNumber < 1
+      || partNumber > MAX_ARTIFACT_PARTS
+      || !Number.isInteger(byteCount)
+      || byteCount < 1
+      || byteCount > ARTIFACT_PART_BYTES
+      || request.body === null
+    ) {
+      return problem(422, "invalid_artifact_part", `Each numbered part must contain 1-${ARTIFACT_PART_BYTES} bytes.`);
+    }
+    const multipart = config.artifactBucket.resumeMultipartUpload(artifact.objectKey, artifact.multipartUploadId);
+    const uploaded = await multipart.uploadPart(partNumber, request.body);
+    await config.store.recordArtifactPart({
+      id: artifact.id,
+      partNumber: uploaded.partNumber,
+      etag: uploaded.etag,
+      byteCount,
+    });
+    return json({ part_number: uploaded.partNumber, etag: uploaded.etag, byte_count: byteCount }, 201);
+  }
+
+  const artifactCompleteMatch = url.pathname.match(/^\/api\/v1\/artifacts\/([^/]+)\/complete$/);
+  if (request.method === "POST" && artifactCompleteMatch) {
+    const token = bearerToken(request);
+    if (!(await authorized(token, config.submissionKeys))) return unauthorized("submission API key");
+    const artifact = await ownedArtifact(config.store, artifactCompleteMatch[1], token);
+    if (!artifact) return problem(404, "artifact_not_found", "Upload not found.");
+    if (artifact.status === "ready") return json(publicArtifact(artifact));
+    if (artifact.status !== "uploading") return problem(409, "invalid_transition", "Upload cannot be completed.");
+    const parts = await config.store.listArtifactParts(artifact.id);
+    if (!validArtifactParts(parts, artifact.archiveSize)) {
+      return problem(422, "incomplete_artifact", "Uploaded parts are incomplete, non-contiguous, or the wrong total size.");
+    }
+    const multipart = config.artifactBucket.resumeMultipartUpload(artifact.objectKey, artifact.multipartUploadId);
+    const object = await multipart.complete(parts.map(({ partNumber, etag }) => ({ partNumber, etag })));
+    if (object.size !== artifact.archiveSize) {
+      await config.artifactBucket.delete(artifact.objectKey);
+      return problem(422, "artifact_size_mismatch", "Completed object size does not match the declared archive.");
+    }
+    const completed = await config.store.completeArtifact({ id: artifact.id, now: unixTime() });
+    return json(publicArtifact(completed || { ...artifact, status: "ready" }));
+  }
+
   if (request.method === "POST" && url.pathname === "/api/v1/submissions") {
     const token = bearerToken(request);
     if (!(await authorized(token, config.submissionKeys))) return unauthorized("submission API key");
@@ -122,17 +234,40 @@ async function route(request, config) {
       return problem(400, "invalid_idempotency_key", "Idempotency-Key must be 8-128 safe ASCII characters.");
     }
 
-    const now = unixTime();
-    const requestHash = await sha256(stableJson(validation.value));
     const submitterKeyHash = await sha256(token);
+    let artifact = null;
+    if (validation.value.artifactId) {
+      artifact = await config.store.getArtifact(validation.value.artifactId);
+      if (!artifact || artifact.status !== "ready" || artifact.submitterKeyHash !== submitterKeyHash) {
+        return problem(422, "artifact_unavailable", "artifact_id must name a completed upload owned by this credential.");
+      }
+    }
+    const submissionValue = {
+      ...validation.value,
+      image: artifact ? `cvbench.local/upload@${artifact.imageId}` : validation.value.image,
+      transportType: artifact ? "uploaded_oci" : "registry",
+      artifact,
+    };
+    delete submissionValue.artifactId;
+    const now = unixTime();
+    const requestHash = await sha256(stableJson({
+      ...submissionValue,
+      artifact: artifact ? {
+        id: artifact.id,
+        archiveSha256: artifact.archiveSha256,
+        archiveSize: artifact.archiveSize,
+        imageId: artifact.imageId,
+      } : null,
+    }));
     const result = await config.store.createSubmission(
       {
         id: crypto.randomUUID(),
-        ...validation.value,
+        ...submissionValue,
         idempotencyKey,
         requestHash,
         submitterKeyHash,
         now,
+        progressTotal: PUBLIC_BENCHMARK.scenario_count,
       },
       config.maxSubmissionsPerHour,
     );
@@ -194,6 +329,52 @@ async function route(request, config) {
         max_result_bytes: MAX_RESULT_BYTES,
       },
     });
+  }
+
+  const artifactDownloadMatch = url.pathname.match(/^\/api\/v1\/internal\/submissions\/([^/]+)\/artifact$/);
+  if (request.method === "GET" && artifactDownloadMatch) {
+    if (!(await authorized(bearerToken(request), [config.runnerToken]))) return unauthorized("runner token");
+    if (!ID_PATTERN.test(artifactDownloadMatch[1])) return problem(404, "not_found", "Submission not found.");
+    const submission = await config.store.getSubmission(artifactDownloadMatch[1]);
+    if (!submission?.artifact || submission.transportType !== "uploaded_oci") {
+      return problem(404, "artifact_not_found", "This submission has no uploaded image artifact.");
+    }
+    const object = await config.artifactBucket?.get(submission.artifact.objectKey);
+    if (!object?.body || object.size !== submission.artifact.archiveSize) {
+      return problem(503, "artifact_unavailable", "The uploaded image artifact is unavailable or incomplete.");
+    }
+    return new Response(object.body, {
+      headers: {
+        "content-type": "application/gzip",
+        "content-length": String(object.size),
+        "cache-control": "private, no-store",
+        "x-cvbench-archive-sha256": submission.artifact.archiveSha256,
+        "x-cvbench-image-id": submission.artifact.imageId,
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
+
+  const progressMatch = url.pathname.match(/^\/api\/v1\/internal\/submissions\/([^/]+)\/progress$/);
+  if (request.method === "POST" && progressMatch) {
+    if (!(await authorized(bearerToken(request), [config.runnerToken]))) return unauthorized("runner token");
+    if (!ID_PATTERN.test(progressMatch[1])) return problem(404, "not_found", "Submission not found.");
+    const parsed = await readJson(request, 4096);
+    if (parsed.error) return parsed.error;
+    const validation = validateProgress(parsed.value);
+    if (validation.error) return problem(422, "invalid_progress", validation.error);
+    const updated = await config.store.updateProgress({
+      id: progressMatch[1],
+      leaseTokenHash: await sha256(validation.value.leaseToken),
+      stage: validation.value.stage,
+      message: validation.value.message,
+      completed: validation.value.completed,
+      total: validation.value.total,
+      now: unixTime(),
+    });
+    return updated
+      ? json({ status: "updated", progress: updated.progress })
+      : problem(409, "invalid_transition", "The job is not running or the lease is stale.");
   }
 
   const overlayMatch = url.pathname.match(/^\/api\/v1\/internal\/submissions\/([^/]+)\/prediction-overlays\/([^/]+)$/);
@@ -389,10 +570,16 @@ function secureAssetResponse(response) {
 
 function validateSubmission(value) {
   if (!isObject(value)) return { error: "Request body must be a JSON object." };
-  if (unknownKeys(value, ["image", "argv", "name", "model_version", "contact", "notes"]).length) {
-    return { error: `Unknown fields: ${unknownKeys(value, ["image", "argv", "name", "model_version", "contact", "notes"]).join(", ")}.` };
+  const allowed = ["image", "artifact_id", "argv", "name", "model_version", "contact", "notes"];
+  if (unknownKeys(value, allowed).length) {
+    return { error: `Unknown fields: ${unknownKeys(value, allowed).join(", ")}.` };
   }
-  if (typeof value.image !== "string" || !IMAGE_PATTERN.test(value.image)) {
+  const registryImage = typeof value.image === "string" && IMAGE_PATTERN.test(value.image);
+  const artifactId = typeof value.artifact_id === "string" && ID_PATTERN.test(value.artifact_id);
+  if (registryImage === artifactId) {
+    return { error: "Provide exactly one immutable image or completed artifact_id." };
+  }
+  if (value.image !== undefined && !registryImage) {
     return { error: "image must be a lowercase OCI reference pinned with @sha256:<64 lowercase hex characters>." };
   }
   if (!Array.isArray(value.argv) || value.argv.length < 1 || value.argv.length > 32) {
@@ -413,12 +600,68 @@ function validateSubmission(value) {
   if (notes.error) return notes;
   return {
     value: {
-      image: value.image,
+      image: registryImage ? value.image : null,
+      artifactId: artifactId ? value.artifact_id : null,
       argv: [...value.argv],
       name: name.value,
       modelVersion: modelVersion.value,
       contact: contact.value,
       notes: notes.value,
+    },
+  };
+}
+
+function validateArtifactCreate(value, maxBytes) {
+  if (!isObject(value) || unknownKeys(value, ["archive_sha256", "archive_size", "image_id", "compression"]).length) {
+    return { error: "Artifact metadata contains unsupported fields." };
+  }
+  if (!SHA256_PATTERN.test(value.archive_sha256 || "")) {
+    return { error: "archive_sha256 must contain 64 lowercase hexadecimal characters." };
+  }
+  if (
+    !Number.isInteger(value.archive_size)
+    || value.archive_size < 1
+    || value.archive_size > maxBytes
+  ) {
+    return { error: `archive_size must be between 1 and ${maxBytes} bytes.` };
+  }
+  if (!IMAGE_ID_PATTERN.test(value.image_id || "")) {
+    return { error: "image_id must be an immutable Docker sha256 image ID." };
+  }
+  if (value.compression !== "gzip") return { error: "compression must be gzip." };
+  return {
+    value: {
+      archiveSha256: value.archive_sha256,
+      archiveSize: value.archive_size,
+      imageId: value.image_id,
+    },
+  };
+}
+
+function validateProgress(value) {
+  if (!isObject(value) || unknownKeys(value, ["lease_token", "stage", "message", "completed", "total"]).length) {
+    return { error: "Progress contains unsupported fields." };
+  }
+  if (!/^[a-f0-9]{64}$/.test(value.lease_token || "")) return { error: "lease_token is invalid." };
+  if (!VALID_PROGRESS_STAGES.has(value.stage)) return { error: "stage is not a supported runner stage." };
+  const message = cleanText(value.message, "message", 1, 240);
+  if (message.error) return message;
+  if (
+    !Number.isInteger(value.completed)
+    || !Number.isInteger(value.total)
+    || value.total !== PUBLIC_BENCHMARK.scenario_count
+    || value.completed < 0
+    || value.completed > value.total
+  ) {
+    return { error: `completed must be 0-${PUBLIC_BENCHMARK.scenario_count} and total must match the suite.` };
+  }
+  return {
+    value: {
+      leaseToken: value.lease_token,
+      stage: value.stage,
+      message: message.value,
+      completed: value.completed,
+      total: value.total,
     },
   };
 }
@@ -614,7 +857,7 @@ function validateSuccessfulReport(report) {
 }
 
 function reportMatchesSubmission(report, submission) {
-  const image = submission.image;
+  const image = submission.artifact?.imageId || submission.image;
   const imageIdentity = report.runtime_isolation.image_identity;
   const imageReferences = [
     report.outcome.resolved_image,
@@ -681,13 +924,46 @@ function publicSubmission(value) {
     id: value.id,
     status: value.status,
     model: { name: value.name, version: value.modelVersion, image: value.image, argv: value.argv },
+    transport: value.transportType === "uploaded_oci"
+      ? {
+          type: "uploaded_oci",
+          archive_sha256: value.artifact?.archiveSha256 || null,
+          image_id: value.artifact?.imageId || null,
+        }
+      : { type: "registry" },
     benchmark: benchmarkForSubmission(value),
     attempt: value.attempt,
+    progress: {
+      stage: value.progress?.stage || value.status,
+      message: value.progress?.message || null,
+      completed: value.progress?.completed || 0,
+      total: value.progress?.total || PUBLIC_BENCHMARK.scenario_count,
+      fraction: value.progress?.total ? value.progress.completed / value.progress.total : 0,
+    },
     result: publicResultSummary(value.result, value),
+    agent_feedback: value.result
+      ? agentFeedback(value.result)
+      : value.status === "failed"
+        ? failureFeedback(value.error)
+        : null,
     error: value.error,
     created_at: iso(value.createdAt),
     updated_at: iso(value.updatedAt),
     started_at: iso(value.startedAt),
+    completed_at: iso(value.completedAt),
+  };
+}
+
+function publicArtifact(value) {
+  return {
+    id: value.id,
+    status: value.status,
+    archive_sha256: value.archiveSha256,
+    archive_size: value.archiveSize,
+    image_id: value.imageId,
+    compression: value.compression,
+    part_size: ARTIFACT_PART_BYTES,
+    created_at: iso(value.createdAt),
     completed_at: iso(value.completedAt),
   };
 }
@@ -849,8 +1125,16 @@ function publicResultSummary(report, submission = null) {
     benchmark: report.benchmark || null,
     scores: scoreSummary(report),
     findings: Array.isArray(report.findings)
-      ? report.findings.map((finding) => ({ finding_id: finding.finding_id, category: finding.category, severity: finding.severity, statement: finding.interpretation?.statement || null }))
+      ? report.findings.map((finding) => ({
+          finding_id: finding.finding_id,
+          category: finding.category,
+          severity: finding.severity,
+          statement: finding.interpretation?.statement || null,
+          possible_causes: Array.isArray(finding.possible_causes) ? finding.possible_causes.slice(0, 4) : [],
+          recommended_test: finding.recommended_test || null,
+        }))
       : [],
+    agent_feedback: agentFeedback(report),
     prediction_overlay: submission?.predictionOverlayRootSha256
       ? {
           state: "complete",
@@ -992,11 +1276,94 @@ function runnerSubmission(value) {
   return {
     id: value.id,
     image: value.image,
+    transport: value.transportType === "uploaded_oci"
+      ? {
+          type: "uploaded_oci",
+          archive_sha256: value.artifact.archiveSha256,
+          archive_size: value.artifact.archiveSize,
+          image_id: value.artifact.imageId,
+          download_path: `/api/v1/internal/submissions/${value.id}/artifact`,
+        }
+      : { type: "registry" },
     argv: value.argv,
     model: { name: value.name, version: value.modelVersion },
     benchmark: PUBLIC_BENCHMARK,
     attempt: value.attempt,
   };
+}
+
+function agentFeedback(report) {
+  const findings = Array.isArray(report?.findings) ? report.findings : [];
+  const scores = scoreSummary(report);
+  const priorities = [...findings]
+    .sort((left, right) => severityRank(right.severity) - severityRank(left.severity))
+    .slice(0, 5)
+    .map((finding) => ({
+      finding_id: finding.finding_id,
+      severity: finding.severity,
+      problem: finding.interpretation?.statement || "The benchmark identified a model issue.",
+      possible_causes: Array.isArray(finding.possible_causes) ? finding.possible_causes.slice(0, 4) : [],
+      next_test: finding.recommended_test || null,
+    }));
+  return {
+    schema_version: "cvbench.agent-feedback/v1",
+    verdict: priorities.length ? "iterate" : "ready_for_comparison",
+    summary: priorities.length
+      ? `${priorities.length} prioritized benchmark finding${priorities.length === 1 ? "" : "s"} should guide the next model iteration.`
+      : "The run completed without a structured benchmark finding; compare its accuracy, timing, and resource axes before declaring it production-ready.",
+    priorities,
+    key_metrics: {
+      acquisition_rate: scores.acquisition_rate,
+      observed_coverage: scores.observed_coverage,
+      mean_iou: scores.mean_iou,
+      id_switches: scores.id_switches,
+      false_track_births: scores.false_track_births,
+      latency_p99_ms: scores.latency_p99_ms,
+      peak_ram_bytes: scores.peak_ram_bytes,
+      real_time_factor: scores.real_time_factor,
+    },
+  };
+}
+
+function failureFeedback(error) {
+  const message = String(error || "The trusted runner failed before producing a score.");
+  let category = "runtime";
+  let nextTest = "repeat-with-same-run-configuration";
+  let cause = "Inspect the terminal error and reproduce the container startup locally.";
+  if (/ready|readiness|CVBENCH_READY|socket|protocol/i.test(message)) {
+    category = "protocol";
+    nextTest = "cvbench-protocol-readiness-smoke";
+    cause = "The image may not connect to CVBENCH_INPUT_SOCKET and emit CVBENCH_READY correctly.";
+  } else if (/memory|oom|137/i.test(message)) {
+    category = "resources";
+    nextTest = "memory-envelope-smoke";
+    cause = "The image may exceed the benchmark memory envelope.";
+  } else if (/timeout|timed out|deadline/i.test(message)) {
+    category = "performance";
+    nextTest = "minimal-sequence-timeout-reproduction";
+    cause = "Startup, inference, output drain, or shutdown may exceed the run budget.";
+  } else if (/image|archive|docker load|pull/i.test(message)) {
+    category = "packaging";
+    nextTest = "linux-amd64-image-load-smoke";
+    cause = "The uploaded archive or registry image may not be a loadable linux/amd64 image.";
+  }
+  return {
+    schema_version: "cvbench.agent-feedback/v1",
+    verdict: "fix_and_retry",
+    summary: "The run failed before a trustworthy score was available.",
+    priorities: [{
+      finding_id: `RUN-${category.toUpperCase()}-FAILURE`,
+      severity: "critical",
+      problem: message,
+      possible_causes: [cause],
+      next_test: nextTest,
+    }],
+    key_metrics: null,
+  };
+}
+
+function severityRank(value) {
+  return { critical: 4, high: 3, medium: 2, low: 1, info: 0 }[value] ?? 0;
 }
 
 function matchesPublicBenchmark(value) {
@@ -1037,6 +1404,33 @@ async function authorized(candidate, expectedTokens) {
     match |= constantTimeEqual(candidateDigest, expectedDigest) ? 1 : 0;
   }
   return match === 1;
+}
+
+async function ownedArtifact(store, id, token) {
+  if (!ID_PATTERN.test(id)) return null;
+  const artifact = await store.getArtifact(id);
+  if (!artifact || artifact.submitterKeyHash !== await sha256(token)) return null;
+  return artifact;
+}
+
+function validArtifactParts(parts, expectedBytes) {
+  if (!Array.isArray(parts) || parts.length < 1 || parts.length > MAX_ARTIFACT_PARTS) return false;
+  let bytes = 0;
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    const finalPart = index === parts.length - 1;
+    if (
+      part.partNumber !== index + 1
+      || typeof part.etag !== "string"
+      || !part.etag
+      || !Number.isInteger(part.byteCount)
+      || part.byteCount < 1
+      || part.byteCount > ARTIFACT_PART_BYTES
+      || (!finalPart && part.byteCount !== ARTIFACT_PART_BYTES)
+    ) return false;
+    bytes += part.byteCount;
+  }
+  return bytes === expectedBytes;
 }
 
 async function actorForCredential(candidate, credentials) {
@@ -1170,7 +1564,7 @@ export const CONTRACT = {
     },
   },
   container: {
-    image: "Prebuilt OCI image pinned as registry/repository@sha256:<64 lowercase hex characters>.",
+    image: "A prebuilt linux/amd64 OCI image, either uploaded as an immutable gzip-compressed Docker archive with sha256 identities or referenced by a registry digest.",
     platform: "linux/amd64",
     network: "disabled",
     filesystem: "container default plus one read/write progressive socket-directory mount at /run/cvbench; no extra mounts and no Docker socket",
@@ -1184,9 +1578,10 @@ export const CONTRACT = {
     },
   },
   submission: {
-    accepted: ["image", "argv", "name", "model_version", "contact", "notes"],
+    accepted: ["exactly one of image or artifact_id", "argv", "name", "model_version", "contact", "notes"],
     rejected: ["source repositories", "build instructions", "shell command strings", "Docker socket access", "custom environment variables", "replay or pacing overrides"],
-    authentication: "Bearer submission API key plus a unique Idempotency-Key header.",
+    authentication: "A locally stored agent credential authenticates artifact upload and submission; every create request also has a deterministic Idempotency-Key.",
+    agent_loop: "cvbench submit . --wait --json builds linux/amd64 locally, uploads the immutable archive, queues it, follows progress, and returns prioritized feedback.",
     public_playback: "Successful new runs publish a bounded, sanitized visualization projection of submitted track geometry. Raw identifiers, raw output records, diagnostics, and private runner timing are not included.",
     terminology: "The submitted object is a complete system image. One linux/amd64 OCI image is a packaging, reproducibility, and security boundary, not a one-learned-model or one-process assumption.",
     compatibility_names: {
@@ -1207,6 +1602,28 @@ export const OPENAPI = {
     "/api/v1/health": { get: { operationId: "health", responses: { 200: { description: "Healthy" }, 503: { description: "D1 unavailable" } } } },
     "/api/v1/contract": { get: { operationId: "getContract", responses: { 200: { description: "Benchmark and container contract" } } } },
     "/api/v1/openapi.json": { get: { operationId: "getOpenApi", responses: { 200: { description: "This document" } } } },
+    "/api/v1/artifacts": {
+      post: {
+        operationId: "createArtifactUpload",
+        security: [{ submissionKey: [] }],
+        requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/CreateArtifact" } } } },
+        responses: { 201: { description: "Multipart upload created" }, 401: { description: "Unauthorized" }, 422: { description: "Invalid metadata" } },
+      },
+    },
+    "/api/v1/artifacts/{id}/parts/{part_number}": {
+      put: {
+        operationId: "uploadArtifactPart",
+        security: [{ submissionKey: [] }],
+        responses: { 201: { description: "Part retained" }, 422: { description: "Invalid part" } },
+      },
+    },
+    "/api/v1/artifacts/{id}/complete": {
+      post: {
+        operationId: "completeArtifactUpload",
+        security: [{ submissionKey: [] }],
+        responses: { 200: { description: "Artifact ready for submission" }, 422: { description: "Incomplete upload" } },
+      },
+    },
     "/api/v1/submissions": {
       post: {
         operationId: "createSubmission",
@@ -1315,14 +1732,27 @@ export const OPENAPI = {
       CreateSubmission: {
         type: "object",
         additionalProperties: false,
-        required: ["image", "argv", "name", "model_version"],
+        required: ["argv", "name", "model_version"],
+        oneOf: [{ required: ["image"] }, { required: ["artifact_id"] }],
         properties: {
           image: { type: "string", pattern: "@sha256:[a-f0-9]{64}$" },
+          artifact_id: { type: "string", format: "uuid" },
           argv: { type: "array", minItems: 1, maxItems: 32, items: { type: "string", minLength: 1, maxLength: 256 } },
           name: { type: "string", maxLength: 100 },
           model_version: { type: "string", maxLength: 100, description: "Version 1 compatibility field containing the submitted system version." },
           contact: { type: "string", maxLength: 200 },
           notes: { type: "string", maxLength: 1000 },
+        },
+      },
+      CreateArtifact: {
+        type: "object",
+        additionalProperties: false,
+        required: ["archive_sha256", "archive_size", "image_id", "compression"],
+        properties: {
+          archive_sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          archive_size: { type: "integer", minimum: 1 },
+          image_id: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          compression: { const: "gzip" },
         },
       },
       TimingComputeSummary: {

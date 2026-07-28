@@ -2,10 +2,51 @@ export class MemoryStore {
   constructor() {
     this.rows = new Map();
     this.notes = new Map();
+    this.artifacts = new Map();
+    this.artifactParts = new Map();
     this.createTail = Promise.resolve();
   }
 
   async health() {}
+
+  async createArtifact(row, maxPerHour) {
+    const recent = [...this.artifacts.values()].filter(
+      (artifact) => artifact.submitterKeyHash === row.submitterKeyHash && artifact.createdAt >= row.now - 3600,
+    );
+    if (recent.length >= maxPerHour) return null;
+    const artifact = {
+      ...row,
+      status: "uploading",
+      compression: "gzip",
+      createdAt: row.now,
+      completedAt: null,
+    };
+    this.artifacts.set(row.id, artifact);
+    return clone(artifact);
+  }
+
+  async getArtifact(id) {
+    return this.artifacts.has(id) ? clone(this.artifacts.get(id)) : null;
+  }
+
+  async recordArtifactPart(part) {
+    this.artifactParts.set(`${part.id}:${part.partNumber}`, clone(part));
+    return this.listArtifactParts(part.id);
+  }
+
+  async listArtifactParts(id) {
+    return [...this.artifactParts.values()]
+      .filter((part) => part.id === id)
+      .sort((left, right) => left.partNumber - right.partNumber)
+      .map(clone);
+  }
+
+  async completeArtifact({ id, now }) {
+    const artifact = this.artifacts.get(id);
+    if (!artifact || artifact.status !== "uploading") return null;
+    Object.assign(artifact, { status: "ready", completedAt: now });
+    return clone(artifact);
+  }
 
   async createSubmission(row, maxPerHour) {
     const operation = this.createTail.then(() => this.createSubmissionAtomic(row, maxPerHour));
@@ -42,6 +83,14 @@ export class MemoryStore {
       predictionOverlaysRequired: false,
       predictionOverlayAttempt: null,
       predictionOverlayRootSha256: null,
+      transportType: row.transportType || "registry",
+      artifact: row.artifact || null,
+      progress: {
+        stage: "queued",
+        message: "Waiting for a trusted runner.",
+        completed: 0,
+        total: row.progressTotal || 16,
+      },
     };
     this.rows.set(row.id, stored);
     return { kind: "created", submission: clone(stored) };
@@ -106,6 +155,12 @@ export class MemoryStore {
       predictionOverlaysRequired,
       predictionOverlayAttempt: null,
       predictionOverlayRootSha256: null,
+      progress: {
+        ...queued.progress,
+        stage: "runner_started",
+        message: "Trusted runner started.",
+        completed: 0,
+      },
     });
     for (const [key, item] of this.overlays || []) {
       if (item.id === queued.id && item.attempt !== queued.attempt) this.overlays.delete(key);
@@ -116,11 +171,32 @@ export class MemoryStore {
     return clone(queued);
   }
 
+  async updateProgress({ id, leaseTokenHash, stage, message, completed, total, now }) {
+    const row = this.rows.get(id);
+    if (!row || row.status !== "running" || row.leaseTokenHash !== leaseTokenHash || row.leaseExpiresAt < now) {
+      return null;
+    }
+    row.progress = { stage, message, completed, total };
+    row.updatedAt = now;
+    return clone(row);
+  }
+
   async requeueExpired(now) {
     let count = 0;
     for (const row of this.rows.values()) {
       if (row.status === "running" && row.leaseExpiresAt < now) {
-        Object.assign(row, { status: "queued", leaseExpiresAt: null, leaseTokenHash: null, updatedAt: now });
+        Object.assign(row, {
+          status: "queued",
+          leaseExpiresAt: null,
+          leaseTokenHash: null,
+          updatedAt: now,
+          progress: {
+            ...row.progress,
+            stage: "queued",
+            message: "Runner lease expired; safely queued for retry.",
+            completed: 0,
+          },
+        });
         count += 1;
       }
     }
@@ -145,6 +221,12 @@ export class MemoryStore {
       leaseExpiresAt: null,
       predictionOverlayAttempt: status === "succeeded" ? row.attempt : null,
       predictionOverlayRootSha256: status === "succeeded" ? overlaySet?.rootSha256 || null : null,
+      progress: {
+        ...row.progress,
+        stage: status === "succeeded" ? "completed" : "failed",
+        message: status === "succeeded" ? "Benchmark completed." : "Benchmark failed.",
+        completed: status === "succeeded" ? row.progress.total : row.progress.completed,
+      },
     });
     return clone(row);
   }

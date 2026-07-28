@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import urllib.error
@@ -32,8 +33,10 @@ from scripts.run_control_plane_job import (
     callback_path,
     callback_payload_bytes,
     cleanup_benchmark_containers,
+    download_submission_artifact,
     execute_submission,
     main,
+    report_progress,
     retry_api_request,
     sanitized_environment,
     upload_prediction_overlays,
@@ -161,6 +164,31 @@ def test_validate_lease_revalidates_untrusted_control_plane_data() -> None:
     assert token == "b" * 64
     assert max_result_bytes == MAX_CALLBACK_BYTES
 
+    uploaded_submission = {
+        "id": "12345678-1234-4123-8123-123456789abc",
+        "image": f"cvbench.local/upload@sha256:{'c' * 64}",
+        "argv": ["python"],
+        "benchmark": BENCHMARK,
+        "transport": {
+            "type": "uploaded_oci",
+            "archive_sha256": "d" * 64,
+            "archive_size": 1234,
+            "image_id": f"sha256:{'c' * 64}",
+            "download_path": "/api/v1/internal/submissions/12345678-1234-4123-8123-123456789abc/artifact",
+        },
+    }
+    validated, _, _ = validate_lease({
+        "submission": uploaded_submission,
+        "lease": {"token": "b" * 64},
+    })
+    assert validated["transport"]["type"] == "uploaded_oci"
+    broken_transport = {
+        **uploaded_submission,
+        "transport": {**uploaded_submission["transport"], "archive_sha256": "../bad"},
+    }
+    with pytest.raises(ValueError, match="uploaded OCI"):
+        validate_lease({"submission": broken_transport, "lease": {"token": "b" * 64}})
+
     with pytest.raises(ValueError, match="argv"):
         validate_lease(
             {
@@ -237,6 +265,50 @@ def test_generated_system_config_preserves_argv_without_a_shell(tmp_path: Path) 
         "command": ["python", "-m", "tracker", "--threshold=0.7"],
     }
     assert config["resources"] == PUBLIC_RESOURCES
+
+
+def test_uploaded_artifact_download_verifies_headers_size_and_sha256(tmp_path: Path) -> None:
+    content = b"compressed immutable image"
+    archive_sha256 = hashlib.sha256(content).hexdigest()
+    submission = {
+        "transport": {
+            "archive_sha256": archive_sha256,
+            "archive_size": len(content),
+            "image_id": f"sha256:{'a' * 64}",
+            "download_path": "/api/v1/internal/submissions/12345678-1234-4123-8123-123456789abc/artifact",
+        }
+    }
+    response = MagicMock()
+    response.headers = {
+        "x-cvbench-archive-sha256": archive_sha256,
+        "x-cvbench-image-id": f"sha256:{'a' * 64}",
+    }
+    response.read.side_effect = [content, b""]
+    response.__enter__.return_value = response
+    destination = tmp_path / "image.tar.gz"
+    with patch("scripts.run_control_plane_job.urllib.request.urlopen", return_value=response):
+        download_submission_artifact("https://cvbench.test", "runner-token", submission, destination)
+    assert destination.read_bytes() == content
+
+    response.read.side_effect = [b"corrupt", b""]
+    with (
+        patch("scripts.run_control_plane_job.urllib.request.urlopen", return_value=response),
+        pytest.raises(RuntimeError, match="size and checksum"),
+    ):
+        download_submission_artifact("https://cvbench.test", "runner-token", submission, destination)
+
+
+def test_progress_failure_is_observable_but_never_fails_scoring(capsys: pytest.CaptureFixture[str]) -> None:
+    with patch("scripts.run_control_plane_job.retry_api_request", side_effect=RuntimeError("offline")):
+        report_progress(
+            "https://cvbench.test",
+            "runner-token",
+            "12345678-1234-4123-8123-123456789abc",
+            "b" * 64,
+            "benchmark_running",
+            "Running.",
+        )
+    assert "Progress update skipped" in capsys.readouterr().err
 
 
 def test_callback_path_and_secret_scrubbing(monkeypatch: pytest.MonkeyPatch) -> None:

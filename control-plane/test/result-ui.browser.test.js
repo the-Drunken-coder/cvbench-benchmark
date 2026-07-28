@@ -53,6 +53,13 @@ function publicRecord() {
       scenario_ids: ["rvmot-a1c9", "rvmot-b7e2", "rvmot-c4f6"],
     },
     attempt: 2,
+    progress: {
+      stage: "completed",
+      message: "Benchmark completed.",
+      completed: 3,
+      total: 3,
+      fraction: 1,
+    },
     result: {
       scores: {
         sample_counts: { output_records: 18906 },
@@ -82,7 +89,18 @@ function publicRecord() {
         category: "tracking_accuracy",
         severity: "high",
         statement: "The system missed a substantial portion of eligible target observations.",
+        possible_causes: ["Detection may be unreliable."],
+        recommended_test: "scenario-family-accuracy-breakdown",
       }],
+      agent_feedback: {
+        schema_version: "cvbench.agent-feedback/v1",
+        verdict: "iterate",
+        summary: "One prioritized benchmark finding should guide the next model iteration.",
+        priorities: [{
+          finding_id: "TRACK-QUALITY-001",
+          next_test: "scenario-family-accuracy-breakdown",
+        }],
+      },
       prediction_overlay: {
         state: "complete",
         schema_version: "cvbench.prediction-overlay/v1",
@@ -213,6 +231,10 @@ test("quick submit safely retries and opens the formatted playback result", asyn
     assert.equal(await page.locator(".result-video-stage img").count(), 2);
     assert.equal(await page.getByText("84.3%").first().textContent(), "84.3%");
     assert.equal(await page.getByText("24.9 MiB").textContent(), "24.9 MiB");
+    await page.getByRole("heading", { name: "Use this run to choose the next change." }).waitFor();
+    assert.equal(await page.locator(".run-progress-meter").getAttribute("aria-valuenow"), "3");
+    await page.getByText("Detection may be unreliable.", { exact: true }).waitFor();
+    await page.getByText(/Next test: scenario-family-accuracy-breakdown/).waitFor();
     await page.getByRole("heading", { name: "public-whole-system-tracking · Version 2.0.0" }).waitFor();
     assert.equal(await page.getByText("2 GiB").textContent(), "2 GiB");
     assert.equal(await page.getByText("90 seconds").textContent(), "90 seconds");

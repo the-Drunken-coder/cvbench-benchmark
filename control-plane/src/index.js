@@ -6,12 +6,14 @@ export default {
     const app = createApp({
       store: new D1Store(env.DB),
       assets: env.ASSETS,
+      artifactBucket: env.SUBMISSION_ARTIFACTS,
       submissionKeys: env.SUBMISSION_API_KEYS || "",
       runnerToken: env.RUNNER_TOKEN || "",
       operatorReadKeys: env.OPERATOR_READ_API_KEYS || env.OPERATOR_API_TOKEN || "",
       operatorAdjudicatorCredentials: env.OPERATOR_ADJUDICATOR_CREDENTIALS || "",
       maxSubmissionsPerHour: env.MAX_SUBMISSIONS_PER_HOUR,
       leaseSeconds: env.LEASE_SECONDS,
+      maxArtifactBytes: env.MAX_ARTIFACT_BYTES,
     });
     return app.fetch(request);
   },

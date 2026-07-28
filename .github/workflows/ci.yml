@@ -55,6 +55,8 @@ jobs:
           cache: pip
       - run: python -m pip install .
       - run: docker build -f examples/Dockerfile.good -t cvbench-example-good:v1 .
+      - name: Validate the agent model project path
+        run: cvbench validate . --dockerfile examples/Dockerfile.good --name ci-agent-model --version ci
       - name: Fresh-checkout trusted-runner lifecycle
         run: |
           test ! -e data/real-video-v2

@@ -12,6 +12,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply cvbench-control-plane --remote",
     "test": "node --test test/*.test.js",
     "test:d1": "node scripts/d1-lifecycle.mjs",
+    "test:d1-agent": "node scripts/d1-agent-lifecycle.mjs",
     "test:preview": "node scripts/test-preview-routes.mjs",
     "test:production-install": "node scripts/test-production-install.mjs",
     "measure:playback": "npm run build && node scripts/measure-scenario-playback.mjs",

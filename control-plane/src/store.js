@@ -7,6 +7,68 @@ export class D1Store {
     await this.db.prepare("SELECT COUNT(*) AS count FROM submissions").first();
   }
 
+  async createArtifact(row, maxPerHour) {
+    const changed = await this.db.prepare(`INSERT INTO submission_artifacts (
+      id, submitter_key_sha256, object_key, multipart_upload_id, status,
+      archive_sha256, archive_size, image_id, compression, created_at
+    ) SELECT ?, ?, ?, ?, 'uploading', ?, ?, ?, 'gzip', ?
+    WHERE (
+      SELECT COUNT(*) FROM submission_artifacts
+      WHERE submitter_key_sha256 = ? AND created_at >= ?
+    ) < ?`)
+      .bind(
+        row.id,
+        row.submitterKeyHash,
+        row.objectKey,
+        row.multipartUploadId,
+        row.archiveSha256,
+        row.archiveSize,
+        row.imageId,
+        row.now,
+        row.submitterKeyHash,
+        row.now - 3600,
+        maxPerHour,
+      )
+      .run();
+    return Number(changed.meta?.changes || 0) === 1 ? this.getArtifact(row.id) : null;
+  }
+
+  async getArtifact(id) {
+    const row = await this.db.prepare("SELECT * FROM submission_artifacts WHERE id = ?").bind(id).first();
+    return row ? deserializeArtifact(row) : null;
+  }
+
+  async recordArtifactPart({ id, partNumber, etag, byteCount }) {
+    await this.db.prepare(`INSERT INTO submission_artifact_parts (artifact_id, part_number, etag, byte_count)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT (artifact_id, part_number) DO UPDATE SET
+        etag = excluded.etag, byte_count = excluded.byte_count`)
+      .bind(id, partNumber, etag, byteCount)
+      .run();
+    return this.listArtifactParts(id);
+  }
+
+  async listArtifactParts(id) {
+    const result = await this.db.prepare(`SELECT part_number, etag, byte_count
+      FROM submission_artifact_parts WHERE artifact_id = ? ORDER BY part_number`)
+      .bind(id)
+      .all();
+    return (result.results || []).map((row) => ({
+      partNumber: row.part_number,
+      etag: row.etag,
+      byteCount: row.byte_count,
+    }));
+  }
+
+  async completeArtifact({ id, now }) {
+    const changed = await this.db.prepare(`UPDATE submission_artifacts
+      SET status = 'ready', completed_at = ?
+      WHERE id = ? AND status = 'uploading'`)
+      .bind(now, id)
+      .run();
+    return Number(changed.meta?.changes || 0) === 1 ? this.getArtifact(id) : null;
+  }
+
   async createSubmission(row, maxPerHour) {
     const existing = await this.db
       .prepare("SELECT id, request_sha256 FROM submissions WHERE submitter_key_sha256 = ? AND idempotency_key = ?")
@@ -21,8 +83,12 @@ export class D1Store {
     await this.db
       .prepare(`INSERT INTO submissions (
         id, status, image, argv_json, name, model_version, contact, notes,
-        idempotency_key, request_sha256, submitter_key_sha256, created_at, updated_at
-      ) SELECT ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        idempotency_key, request_sha256, submitter_key_sha256, created_at, updated_at,
+        transport_type, artifact_id, artifact_object_key, artifact_archive_sha256,
+        artifact_archive_size, artifact_image_id, progress_stage, progress_message,
+        progress_completed, progress_total
+      ) SELECT ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        'queued', 'Waiting for a trusted runner.', 0, ?
       WHERE (
         SELECT COUNT(*) FROM submissions
         WHERE submitter_key_sha256 = ? AND created_at >= ?
@@ -41,6 +107,13 @@ export class D1Store {
         row.submitterKeyHash,
         row.now,
         row.now,
+        row.transportType || "registry",
+        row.artifact?.id || null,
+        row.artifact?.objectKey || null,
+        row.artifact?.archiveSha256 || null,
+        row.artifact?.archiveSize || null,
+        row.artifact?.imageId || null,
+        row.progressTotal || 16,
         row.submitterKeyHash,
         row.now - 3600,
         maxPerHour,
@@ -147,7 +220,9 @@ export class D1Store {
         .prepare(`UPDATE submissions SET status = 'running', lease_token_sha256 = ?,
           lease_expires_at = ?, attempt = attempt + 1, prediction_overlays_required = ?,
           prediction_overlay_attempt = NULL, prediction_overlay_root_sha256 = NULL,
-          started_at = COALESCE(started_at, ?), updated_at = ?
+          started_at = COALESCE(started_at, ?), updated_at = ?,
+          progress_stage = 'runner_started', progress_message = 'Trusted runner started.',
+          progress_completed = 0
           WHERE id = ? AND status = 'queued'`)
         .bind(leaseTokenHash, leaseExpiresAt, predictionOverlaysRequired ? 1 : 0, now, now, queued.id)
         .run();
@@ -156,10 +231,22 @@ export class D1Store {
     return null;
   }
 
+  async updateProgress({ id, leaseTokenHash, stage, message, completed, total, now }) {
+    const changed = await this.db.prepare(`UPDATE submissions
+      SET progress_stage = ?, progress_message = ?, progress_completed = ?,
+        progress_total = ?, updated_at = ?
+      WHERE id = ? AND status = 'running' AND lease_token_sha256 = ? AND lease_expires_at >= ?`)
+      .bind(stage, message, completed, total, now, id, leaseTokenHash, now)
+      .run();
+    return Number(changed.meta?.changes || 0) === 1 ? this.getSubmission(id) : null;
+  }
+
   async requeueExpired(now) {
     const changed = await this.db
       .prepare(`UPDATE submissions SET status = 'queued', lease_token_sha256 = NULL,
-        lease_expires_at = NULL, updated_at = ?
+        lease_expires_at = NULL, updated_at = ?, progress_stage = 'queued',
+        progress_message = 'Runner lease expired; safely queued for retry.',
+        progress_completed = 0
         WHERE status = 'running' AND lease_expires_at < ?`)
       .bind(now, now)
       .run();
@@ -256,7 +343,9 @@ export class D1Store {
           SELECT root_sha256 FROM prediction_overlay_sets
           WHERE submission_id = submissions.id AND attempt = submissions.attempt
         ) ELSE NULL END,
-        lease_token_sha256 = NULL, lease_expires_at = NULL
+        lease_token_sha256 = NULL, lease_expires_at = NULL,
+        progress_stage = ?, progress_message = ?,
+        progress_completed = CASE WHEN ? = 'succeeded' THEN progress_total ELSE progress_completed END
         WHERE id = ? AND status = 'running' AND lease_token_sha256 = ? AND lease_expires_at >= ?
           AND (? != 'succeeded' OR prediction_overlays_required = 0 OR EXISTS (
             SELECT 1 FROM prediction_overlay_sets
@@ -270,6 +359,9 @@ export class D1Store {
         now,
         now,
         status,
+        status,
+        status,
+        status === "succeeded" ? "Benchmark completed." : "Benchmark failed.",
         status,
         id,
         leaseTokenHash,
@@ -300,8 +392,41 @@ function deserialize(row) {
     startedAt: row.started_at,
     completedAt: row.completed_at,
     leaseExpiresAt: row.lease_expires_at,
+    transportType: row.transport_type || "registry",
+    artifact: row.artifact_id
+      ? {
+          id: row.artifact_id,
+          objectKey: row.artifact_object_key,
+          archiveSha256: row.artifact_archive_sha256,
+          archiveSize: row.artifact_archive_size,
+          imageId: row.artifact_image_id,
+          compression: "gzip",
+        }
+      : null,
+    progress: {
+      stage: row.progress_stage || (row.status === "queued" ? "queued" : row.status),
+      message: row.progress_message || null,
+      completed: row.progress_completed || 0,
+      total: row.progress_total || 16,
+    },
     predictionOverlaysRequired: row.prediction_overlays_required === 1,
     predictionOverlayAttempt: row.prediction_overlay_attempt ?? null,
     predictionOverlayRootSha256: row.prediction_overlay_root_sha256 || null,
+  };
+}
+
+function deserializeArtifact(row) {
+  return {
+    id: row.id,
+    submitterKeyHash: row.submitter_key_sha256,
+    objectKey: row.object_key,
+    multipartUploadId: row.multipart_upload_id,
+    status: row.status,
+    archiveSha256: row.archive_sha256,
+    archiveSize: row.archive_size,
+    imageId: row.image_id,
+    compression: row.compression,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
   };
 }

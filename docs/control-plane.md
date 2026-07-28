@@ -1,24 +1,35 @@
 # Public control plane
 
-CVBench's public control plane is one Cloudflare Worker with Static Assets and D1. It validates and queues immutable submitted system images; it never runs submitted code. A scheduled or manually dispatched GitHub-hosted Actions runner leases one job at a time and invokes the existing Docker-isolated CVBench engine.
+CVBench's public control plane is one Cloudflare Worker with Static Assets, D1,
+and private R2 artifact storage. It validates and queues immutable submitted
+system images; it never runs submitted code. A scheduled or manually
+dispatched GitHub-hosted Actions runner leases one job at a time and invokes
+the existing Docker-isolated CVBench engine.
 
 Every new public v1 submission runs the fixed `public-whole-system-tracking` Version 3 suite declared by `benchmarks/public-whole-system-v3.yaml`: the same 13 synthetic scenarios and 3 dense, full-frame real-video scenarios, with an expanded 4-CPU, 8192-MiB, 240-second execution envelope. The request schema remains compatible and has no benchmark selector. Queued/public records and runner leases state the exact assignment, and the Worker rejects a successful callback whose report identifies a different benchmark or version. Completed historical records retain the benchmark identity, resource envelope, and run budgets stored in their report.
 
 The same assignment is fixed to `cvbench.timing-compute/v1`, `cvbench.delivery-lossless/v1`, replay profile `native` at exactly 1.0x, and `cvbench.pareto/v1`. `/api/v1` accepts no replay-rate override, so another delivery pace cannot share the native leaderboard. Successful callbacks with a different timing, delivery, replay, or Pareto policy are rejected. Public and operator result summaries expose native duration, replay identity, CPU-seconds/native-source-second, real-time factor, peak RAM, and class while retaining the raw accuracy metrics.
 
 ```text
-human or agent -> Worker API -> D1 queue
-                       ^             |
-                       | result      | lease
-                       |             v
-                 GitHub-hosted Linux runner -> Docker-isolated submitted image
+agent CLI -> private R2 upload -> Worker API -> D1 queue
+                                        ^             |
+human browser -> public result page     | result      | lease + progress
+                                        |             v
+                                  GitHub-hosted Linux runner
+                                             |
+                                             v
+                                  Docker-isolated submitted image
 ```
 
 The Worker source, site, migrations, and JavaScript tests live in `control-plane/`. The execution bridge is `scripts/run_control_plane_job.py`, and `.github/workflows/control-plane-runner.yml` schedules it.
 
 ## Security properties
 
-- Submissions require `Authorization: Bearer ...` and accept only a prebuilt OCI image pinned by SHA-256, a bounded argv array, and bounded descriptive metadata.
+- Artifact creation and submission require `Authorization: Bearer ...`.
+  CVBench accepts either a prebuilt OCI image uploaded directly by the agent
+  CLI with an archive hash, exact Docker image ID, and byte count, or a
+  registry image pinned by SHA-256. Both transports accept only a bounded argv
+  array and bounded descriptive metadata.
 - Source repositories, build steps, shell strings, environment variables, Docker socket access, and mutable image tags are rejected.
 - Submission keys are compared through fixed-length SHA-256 digests with a constant-time byte comparison. D1 stores only the submitter-key digest.
 - `Idempotency-Key` is unique per submitter-key digest. Repeating the same body returns the existing job; changing the body returns `409`.
@@ -36,7 +47,11 @@ The Worker source, site, migrations, and JavaScript tests live in `control-plane
 
 The one-image rule is a packaging, reproducibility, and security boundary. It is not a one-learned-model or one-process assumption. A system under test may combine a detector, tracker, temporal memory, association, filtering, and post-processing pipeline, including multiple cooperating processes, provided it connects to the progressive socket, emits `CVBENCH_READY`, and speaks `cvbench.track/v1`.
 
-Public registry images are the zero-credential default. A manually operated runner may pre-authenticate Docker to a private registry, but registry credentials must never be added to submission metadata.
+Direct private upload is the default agent path and removes registry accounts,
+tags, pushes, and digest lookup from the iteration loop. Registry-digest
+submission remains supported for established CI systems. A manually operated
+runner may pre-authenticate Docker to a private registry, but registry
+credentials must never be added to submission metadata.
 
 ## Local, Docker-free Worker and site development
 
@@ -102,14 +117,25 @@ In the Cloudflare dashboard:
 3. Set the build command to `npm ci`; `postinstall` performs the one deterministic catalog build.
 4. Set the deploy command to `npx wrangler deploy`.
 5. Set the production branch to `main`. Leave branch builds enabled so pull-request branches receive preview versions.
-6. Allow Wrangler to provision the D1 binding named `DB` from `wrangler.jsonc`; the narrowly scoped database name is `cvbench-control-plane`.
-7. After first provisioning, apply the schema from the same root:
+6. Allow Wrangler to provision the D1 binding named `DB` from
+   `wrangler.jsonc`; the narrowly scoped database name is
+   `cvbench-control-plane`.
+7. Create the private R2 bucket declared by the `SUBMISSION_ARTIFACTS` binding:
+
+   ```bash
+   npx wrangler r2 bucket create cvbench-submission-artifacts
+   ```
+
+   Configure an object-expiration lifecycle for uploaded archives after the
+   longest useful result-retention window. Submitted archives are private and
+   are exposed only to an authenticated trusted runner.
+8. After first provisioning, apply the schema from the same root:
 
    ```bash
    npx wrangler d1 migrations apply cvbench-control-plane --remote
    ```
 
-8. Add encrypted Worker secrets. Generate independent high-entropy values and retain the runner value for the matching GitHub Actions secret:
+9. Add encrypted Worker secrets. Generate independent high-entropy values and retain the runner value for the matching GitHub Actions secret:
 
    ```bash
    npx wrangler secret put SUBMISSION_API_KEYS
@@ -120,8 +146,8 @@ In the Cloudflare dashboard:
 
    `SUBMISSION_API_KEYS` and `OPERATOR_READ_API_KEYS` accept comma-separated keys to allow rotation. All four credential scopes must contain globally unique bearer values; any overlap disables protected routes until corrected. `OPERATOR_ADJUDICATOR_CREDENTIALS` is a secret JSON actor-to-token mapping; rotate it as one secret and do not put bearer values in `wrangler.jsonc`, Actions variables, job metadata, PR text, or logs.
 
-9. In GitHub repository settings, add the Actions variable `CVBENCH_API_BASE_URL` with the deployed `https://...workers.dev` origin. Create an environment named `cvbench-production`, restrict its deployment branches to `main` only, and put `CVBENCH_RUNNER_TOKEN` in that environment with exactly the same value as the Worker `RUNNER_TOKEN`. Do not keep a repository-level copy of this secret.
-10. Manually dispatch **Trusted benchmark runner** once. The cron schedule checks for one queued job every 15 minutes.
+10. In GitHub repository settings, add the Actions variable `CVBENCH_API_BASE_URL` with the deployed `https://...workers.dev` origin. Create an environment named `cvbench-production`, restrict its deployment branches to `main` only, and put `CVBENCH_RUNNER_TOKEN` in that environment with exactly the same value as the Worker `RUNNER_TOKEN`. Do not keep a repository-level copy of this secret.
+11. Manually dispatch **Trusted benchmark runner** once. The cron schedule checks for one queued job every 15 minutes.
 
 Cloudflare account identifiers and API credentials remain dashboard/runtime configuration and are not committed.
 
@@ -133,7 +159,22 @@ Get the live contract before packaging a system:
 curl -sS "$CVBENCH_API_BASE_URL/api/v1/contract"
 ```
 
-Create a job using a digest returned by the registry, never a locally guessed digest:
+The primary agent path is:
+
+```bash
+cvbench login
+cvbench doctor
+cvbench submit . --wait --json
+```
+
+This builds `linux/amd64`, multipart-uploads a gzip-compressed Docker archive,
+queues the run, prints stage updates to stderr, and returns a stable
+`cvbench.agent-result/v1` JSON object containing the result URL, raw scores,
+prioritized findings, likely causes, and a recommended next test. See
+[Agent development loop](agent-development-loop.md).
+
+Established CI systems can still create a job using a digest returned by their
+registry, never a locally guessed digest:
 
 ```bash
 curl -sS "$CVBENCH_API_BASE_URL/api/v1/submissions" \

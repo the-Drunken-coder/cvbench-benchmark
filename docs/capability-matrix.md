@@ -29,4 +29,5 @@ Status is explicit so architecture hooks are not mistaken for delivered behavior
 | Long-running stability configuration | Implemented-tested | Soak assertions cover lifecycle-derived ID reuse/exhaustion over 83 births, state contamination, false-positive accumulation, recovery, latency drift, and memory growth |
 | Additional GPU vendors | Architecture only—not implemented | Resource fields/interface permit later collectors; Version 1 requires NVIDIA only |
 | Alternate transports and geometry | Architecture only—not implemented | Explicit Version 1 non-goal |
-| Cloud control plane/dashboard | Implemented-tested | Worker/D1 queue, least-privilege operator JSON API, small polling console, bounded audit evidence, and adjudication notes; submitted-system execution remains on the trusted GitHub runner |
+| Agent submission and iteration loop | Implemented-tested | One-command local Docker build, private multipart OCI upload, deterministic idempotency, live progress, stable result JSON, and actionable terminal feedback |
+| Cloud control plane/dashboard | Implemented-tested | Worker/D1 queue, private R2 artifact transport, least-privilege operator JSON API, live public progress/results UI, bounded audit evidence, and adjudication notes; submitted-system execution remains on the trusted GitHub runner |

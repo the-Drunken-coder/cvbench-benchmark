@@ -207,6 +207,138 @@ test("submission create, public read, idempotent replay, lease, and scored resul
   assert.equal((await result(created.id, { status: "failed", lease_token: leased.lease.token, error: "late" })).status, 409);
 });
 
+test("agent artifact upload queues an immutable local image and exposes live runner progress", async () => {
+  const artifactBucket = new MemoryArtifactBucket();
+  const artifactApp = createApp({
+    store,
+    artifactBucket,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+    operatorReadKeys: OPERATOR_READ_TOKEN,
+    operatorAdjudicatorCredentials: { "operator/alice": OPERATOR_WRITE_TOKEN },
+    maxSubmissionsPerHour: 2,
+    leaseSeconds: 3000,
+    predictionOverlaysRequired: false,
+  });
+  const archive = new TextEncoder().encode("immutable docker archive");
+  const archiveSha256 = await sha256("immutable docker archive");
+  const createdArtifact = await requestFor(artifactApp, "/api/v1/artifacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      archive_sha256: archiveSha256,
+      archive_size: archive.byteLength,
+      image_id: `sha256:${"d".repeat(64)}`,
+      compression: "gzip",
+    }),
+  });
+  assert.equal(createdArtifact.status, 201);
+  const artifact = await createdArtifact.json();
+  assert.equal(artifact.status, "uploading");
+  assert.equal(artifact.part_size, 16 * 1024 * 1024);
+
+  const uploaded = await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/parts/1`, {
+    method: "PUT",
+    headers: {
+      authorization: `Bearer ${SUBMISSION_KEY}`,
+      "content-length": String(archive.byteLength),
+    },
+    body: archive,
+  });
+  assert.equal(uploaded.status, 201);
+  const completedArtifact = await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/complete`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}` },
+  });
+  assert.equal(completedArtifact.status, 200);
+  assert.equal((await completedArtifact.json()).status, "ready");
+
+  const submissionResponse = await requestFor(artifactApp, "/api/v1/submissions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${SUBMISSION_KEY}`,
+      "content-type": "application/json",
+      "idempotency-key": "agent-upload-0001",
+    },
+    body: JSON.stringify({
+      artifact_id: artifact.id,
+      argv: ["python", "-m", "tracker"],
+      name: "Agent tracker",
+      model_version: "iteration-1",
+    }),
+  });
+  assert.equal(submissionResponse.status, 201);
+  const submission = await submissionResponse.json();
+  assert.equal(submission.transport.type, "uploaded_oci");
+  assert.equal(submission.progress.stage, "queued");
+
+  const leaseResponse = await requestFor(artifactApp, "/api/v1/internal/leases", {
+    method: "POST",
+    headers: { authorization: `Bearer ${RUNNER_TOKEN}` },
+  });
+  const leased = await leaseResponse.json();
+  assert.equal(leased.submission.transport.type, "uploaded_oci");
+  assert.equal(leased.submission.transport.image_id, `sha256:${"d".repeat(64)}`);
+
+  const downloaded = await requestFor(
+    artifactApp,
+    `/api/v1/internal/submissions/${submission.id}/artifact`,
+    { headers: { authorization: `Bearer ${RUNNER_TOKEN}` } },
+  );
+  assert.equal(downloaded.status, 200);
+  assert.equal(await downloaded.text(), "immutable docker archive");
+  assert.equal(downloaded.headers.get("x-cvbench-archive-sha256"), archiveSha256);
+
+  const progressResponse = await requestFor(
+    artifactApp,
+    `/api/v1/internal/submissions/${submission.id}/progress`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${RUNNER_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        lease_token: leased.lease.token,
+        stage: "benchmark_running",
+        message: "Scoring scenario 5 of 16.",
+        completed: 5,
+        total: 16,
+      }),
+    },
+  );
+  assert.equal(progressResponse.status, 200);
+  const publicRunning = await (await requestFor(artifactApp, `/api/v1/submissions/${submission.id}`)).json();
+  assert.equal(publicRunning.progress.stage, "benchmark_running");
+  assert.equal(publicRunning.progress.completed, 5);
+  assert.equal(publicRunning.progress.fraction, 5 / 16);
+});
+
+test("artifact upload creation is rate limited before abandoned multipart state accumulates", async () => {
+  const artifactBucket = new MemoryArtifactBucket();
+  const artifactApp = createApp({
+    store,
+    artifactBucket,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+    maxSubmissionsPerHour: 1,
+  });
+  const body = JSON.stringify({
+    archive_sha256: "a".repeat(64),
+    archive_size: 1024,
+    image_id: `sha256:${"b".repeat(64)}`,
+    compression: "gzip",
+  });
+  const create = () => requestFor(artifactApp, "/api/v1/artifacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-type": "application/json" },
+    body,
+  });
+
+  assert.equal((await create()).status, 201);
+  const limited = await create();
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("retry-after"), "3600");
+  assert.equal(artifactBucket.uploads.size, 1);
+});
+
 test("historical completed results retain their Version 2 benchmark envelope", async () => {
   const created = await (await submit(validBody(), "legacy-v2-record-0001")).json();
   const legacy = scoredReport();
@@ -449,7 +581,10 @@ test("failed jobs require a bounded error and valid running lease", async () => 
   assert.equal((await result(created.id, { status: "failed", lease_token: leased.lease.token })).status, 422);
   const response = await result(created.id, { status: "failed", lease_token: leased.lease.token, error: "container failed readiness" });
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).error, "container failed readiness");
+  const failed = await response.json();
+  assert.equal(failed.error, "container failed readiness");
+  assert.equal(failed.agent_feedback.verdict, "fix_and_retry");
+  assert.equal(failed.agent_feedback.priorities[0].next_test, "cvbench-protocol-readiness-smoke");
 });
 
 test("result callback payloads cannot exceed the advertised budget", async () => {
@@ -1342,4 +1477,54 @@ function operatorNoteRequest(appInstance, id, token) {
 async function sha256(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+class MemoryArtifactBucket {
+  constructor() {
+    this.uploads = new Map();
+    this.objects = new Map();
+  }
+
+  async createMultipartUpload(key) {
+    const uploadId = crypto.randomUUID();
+    this.uploads.set(`${key}:${uploadId}`, new Map());
+    return this.resumeMultipartUpload(key, uploadId);
+  }
+
+  resumeMultipartUpload(key, uploadId) {
+    const bucket = this;
+    return {
+      key,
+      uploadId,
+      async uploadPart(partNumber, body) {
+        const bytes = new Uint8Array(await new Response(body).arrayBuffer());
+        bucket.uploads.get(`${key}:${uploadId}`).set(partNumber, bytes);
+        return { partNumber, etag: `etag-${partNumber}` };
+      },
+      async complete(parts) {
+        const chunks = parts.map((part) => bucket.uploads.get(`${key}:${uploadId}`).get(part.partNumber));
+        const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        bucket.objects.set(key, bytes);
+        return { size };
+      },
+      async abort() {
+        bucket.uploads.delete(`${key}:${uploadId}`);
+      },
+    };
+  }
+
+  async get(key) {
+    const bytes = this.objects.get(key);
+    return bytes ? { size: bytes.byteLength, body: new Response(bytes).body } : null;
+  }
+
+  async delete(key) {
+    this.objects.delete(key);
+  }
 }
