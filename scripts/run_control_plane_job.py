@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+import contextlib
+import gzip
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -42,6 +46,7 @@ SECRET_ENVIRONMENT_KEYS = {
     "GITHUB_TOKEN",
 }
 MAX_CALLBACK_BYTES = 1024 * 1024
+MAX_EXPANDED_ARTIFACT_BYTES = 8 * 1024 * 1024 * 1024
 PUBLIC_BENCHMARK_ID = "public-whole-system-tracking"
 PUBLIC_BENCHMARK_VERSION = "3.0.0"
 PUBLIC_BENCHMARK_MANIFEST = "benchmarks/public-whole-system-v3.yaml"
@@ -144,11 +149,23 @@ def validate_lease(lease: dict[str, Any]) -> tuple[dict[str, Any], str, int]:
     argv = submission.get("argv")
     token = lease_data.get("token")
     benchmark = submission.get("benchmark")
+    transport = submission.get("transport", {"type": "registry"})
     max_result_bytes = lease_data.get("max_result_bytes", MAX_CALLBACK_BYTES)
     if not isinstance(job_id, str) or not JOB_ID_PATTERN.fullmatch(job_id):
         raise ValueError("lease contains an invalid submission id")
     if not isinstance(image, str) or not IMAGE_PATTERN.fullmatch(image):
         raise ValueError("lease contains an invalid immutable image reference")
+    if not isinstance(transport, dict) or transport.get("type") not in {"registry", "uploaded_oci"}:
+        raise ValueError("lease contains an invalid image transport")
+    if transport.get("type") == "uploaded_oci" and (
+        not re.fullmatch(r"[a-f0-9]{64}", str(transport.get("archive_sha256", "")))
+        or not isinstance(transport.get("archive_size"), int)
+        or isinstance(transport.get("archive_size"), bool)
+        or not 1 <= transport["archive_size"] <= 8 * 1024 * 1024 * 1024
+        or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(transport.get("image_id", "")))
+        or transport.get("download_path") != f"/api/v1/internal/submissions/{job_id}/artifact"
+    ):
+        raise ValueError("lease contains invalid uploaded OCI metadata")
     if (
         not isinstance(argv, list)
         or not 1 <= len(argv) <= 32
@@ -313,7 +330,15 @@ def cleanup_benchmark_containers(job_id: str, environment: dict[str, str]) -> in
     return len(container_ids)
 
 
-def execute_submission(repository: Path, submission: dict[str, Any], work: Path) -> dict[str, Any]:
+def execute_submission(
+    repository: Path,
+    submission: dict[str, Any],
+    work: Path,
+    *,
+    base_url: str | None = None,
+    runner_token: str | None = None,
+    lease_token: str | None = None,
+) -> dict[str, Any]:
     image = submission["image"]
     environment = sanitized_environment()
     job_id = str(submission["id"])
@@ -321,17 +346,83 @@ def execute_submission(repository: Path, submission: dict[str, Any], work: Path)
         raise ValueError("submission ID is invalid")
     environment["CVBENCH_DOCKER_JOB_ID"] = job_id
     try:
+        transport = submission.get("transport", {"type": "registry"})
+        if transport.get("type") == "uploaded_oci":
+            if not base_url or not runner_token or not lease_token:
+                raise ValueError("uploaded OCI execution requires control-plane credentials")
+            report_progress(
+                base_url,
+                runner_token,
+                job_id,
+                lease_token,
+                "artifact_download",
+                "Downloading the immutable image archive.",
+            )
+            archive = work / "submitted-image.docker.tar.gz"
+            download_submission_artifact(base_url, runner_token, submission, archive)
+            report_progress(
+                base_url,
+                runner_token,
+                job_id,
+                lease_token,
+                "image_load",
+                "Loading and verifying the linux/amd64 image.",
+            )
+            try:
+                load_uploaded_image(archive, repository, environment)
+            finally:
+                archive.unlink(missing_ok=True)
+            image = transport["image_id"]
+            inspected = subprocess.run(
+                ["docker", "image", "inspect", "--format", "{{.Id}} {{.Os}}/{{.Architecture}}", image],
+                capture_output=True,
+                text=True,
+                cwd=repository,
+                env=environment,
+                timeout=30,
+                check=True,
+            ).stdout.strip()
+            if inspected != f"{image} linux/amd64":
+                raise RuntimeError("uploaded archive does not contain the declared linux/amd64 image")
+        else:
+            if base_url and runner_token and lease_token:
+                report_progress(
+                    base_url,
+                    runner_token,
+                    job_id,
+                    lease_token,
+                    "image_load",
+                    "Pulling and verifying the immutable registry image.",
+                )
+            subprocess.run(
+                ["docker", "pull", "--platform", "linux/amd64", image],
+                cwd=repository,
+                env=environment,
+                timeout=600,
+                check=True,
+            )
+        if base_url and runner_token and lease_token:
+            report_progress(
+                base_url,
+                runner_token,
+                job_id,
+                lease_token,
+                "corpus_preparation",
+                "Verifying the pinned benchmark corpus.",
+            )
         hydrate(repository)
-        subprocess.run(
-            ["docker", "pull", "--platform", "linux/amd64", image],
-            cwd=repository,
-            env=environment,
-            timeout=600,
-            check=True,
-        )
         system_config = work / "submitted-system.json"
         runs = work / "runs"
-        write_system_config(system_config, submission)
+        write_system_config(system_config, {**submission, "image": image})
+        if base_url and runner_token and lease_token:
+            report_progress(
+                base_url,
+                runner_token,
+                job_id,
+                lease_token,
+                "benchmark_running",
+                "Running the fixed 16-scenario benchmark.",
+            )
         subprocess.run(
             [
                 sys.executable,
@@ -434,12 +525,134 @@ def callback_path(submission_id: str) -> str:
     return f"/api/v1/internal/submissions/{submission_id}/result"
 
 
+def download_submission_artifact(
+    base_url: str,
+    runner_token: str,
+    submission: dict[str, Any],
+    destination: Path,
+) -> None:
+    transport = submission["transport"]
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}{transport['download_path']}",
+        method="GET",
+        headers={
+            "Authorization": f"Bearer {runner_token}",
+            "User-Agent": "cvbench-trusted-runner/1",
+        },
+    )
+    digest = hashlib.sha256()
+    size = 0
+    with urllib.request.urlopen(request, timeout=600) as response, destination.open("wb") as output:
+        if response.headers.get("x-cvbench-archive-sha256") != transport["archive_sha256"]:
+            raise RuntimeError("artifact response checksum metadata does not match the lease")
+        if response.headers.get("x-cvbench-image-id") != transport["image_id"]:
+            raise RuntimeError("artifact response image identity does not match the lease")
+        while chunk := response.read(1024 * 1024):
+            size += len(chunk)
+            if size > transport["archive_size"]:
+                raise RuntimeError("artifact response exceeded its declared byte count")
+            digest.update(chunk)
+            output.write(chunk)
+    if size != transport["archive_size"] or digest.hexdigest() != transport["archive_sha256"]:
+        destination.unlink(missing_ok=True)
+        raise RuntimeError("artifact bytes do not match the declared size and checksum")
+
+
+def load_uploaded_image(
+    archive: Path,
+    repository: Path,
+    environment: dict[str, str],
+    *,
+    max_expanded_bytes: int = MAX_EXPANDED_ARTIFACT_BYTES,
+    timeout_seconds: float = 600,
+) -> None:
+    """Stream a verified gzip archive into Docker without trusting its expansion ratio."""
+    process = subprocess.Popen(
+        ["docker", "load"],
+        stdin=subprocess.PIPE,
+        cwd=repository,
+        env=environment,
+    )
+    if process.stdin is None:
+        process.kill()
+        process.wait()
+        raise RuntimeError("docker load did not expose an input stream")
+    expanded = 0
+    started = time.monotonic()
+    deadline_expired = threading.Event()
+
+    def expire_loader() -> None:
+        if process.poll() is None:
+            deadline_expired.set()
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+
+    watchdog = threading.Timer(timeout_seconds, expire_loader)
+    watchdog.daemon = True
+    watchdog.start()
+    try:
+        with gzip.open(archive, "rb") as source:
+            while chunk := source.read(1024 * 1024):
+                expanded += len(chunk)
+                if expanded > max_expanded_bytes:
+                    raise RuntimeError(
+                        f"expanded image archive exceeds the {max_expanded_bytes}-byte runner limit"
+                    )
+                if deadline_expired.is_set():
+                    raise subprocess.TimeoutExpired(["docker", "load"], timeout_seconds)
+                process.stdin.write(chunk)
+        process.stdin.close()
+        remaining = max(0.1, timeout_seconds - (time.monotonic() - started))
+        return_code = process.wait(timeout=remaining)
+        if return_code:
+            raise subprocess.CalledProcessError(return_code, ["docker", "load"])
+    except BaseException as error:
+        with contextlib.suppress(BrokenPipeError, OSError):
+            process.stdin.close()
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        if deadline_expired.is_set() and not isinstance(error, subprocess.TimeoutExpired):
+            raise subprocess.TimeoutExpired(["docker", "load"], timeout_seconds) from error
+        raise
+    finally:
+        watchdog.cancel()
+
+
+def report_progress(
+    base_url: str,
+    runner_token: str,
+    submission_id: str,
+    lease_token: str,
+    stage: str,
+    message: str,
+    completed: int = 0,
+) -> None:
+    try:
+        retry_api_request(
+            base_url,
+            runner_token,
+            f"/api/v1/internal/submissions/{submission_id}/progress",
+            body={
+                "lease_token": lease_token,
+                "stage": stage,
+                "message": message,
+                "completed": completed,
+                "total": len(PUBLIC_SCENARIO_IDS),
+            },
+        )
+    except Exception as exc:
+        print(f"Progress update skipped: {exc}", file=sys.stderr)
+
+
 def upload_prediction_overlays(
     base_url: str,
     runner_token: str,
     submission_id: str,
     lease_token: str,
     work: Path,
+    *,
+    progress: bool = False,
 ) -> None:
     overlay_dirs = list((work / "runs").glob("*/prediction-overlays"))
     if len(overlay_dirs) != 1:
@@ -447,7 +660,7 @@ def upload_prediction_overlays(
     paths = sorted(overlay_dirs[0].glob("*.json"))
     if {path.stem for path in paths} != PUBLIC_SCENARIO_IDS:
         raise RuntimeError("prediction overlay set does not match the assigned public suite")
-    for path in paths:
+    for completed, path in enumerate(paths, start=1):
         payload = json.loads(path.read_text())
         retry_api_request(
             base_url,
@@ -457,6 +670,16 @@ def upload_prediction_overlays(
             method="PUT",
             headers={"X-CVBench-Lease-Token": lease_token},
         )
+        if progress:
+            report_progress(
+                base_url,
+                runner_token,
+                submission_id,
+                lease_token,
+                "publishing_playback",
+                f"Publishing model playback {completed} of {len(paths)}.",
+                completed,
+            )
     retry_api_request(
         base_url,
         runner_token,
@@ -482,7 +705,14 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="cvbench-job-") as temporary:
         try:
             temporary_path = Path(temporary)
-            report = execute_submission(repository, submission, temporary_path)
+            report = execute_submission(
+                repository,
+                submission,
+                temporary_path,
+                base_url=base_url,
+                runner_token=runner_token,
+                lease_token=lease_token,
+            )
             success_body = build_success_callback(report, lease_token, max_result_bytes)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"[:2000]
@@ -504,6 +734,7 @@ def main() -> int:
                 submission["id"],
                 lease_token,
                 temporary_path,
+                progress=True,
             )
         except Exception as publication_error:
             print(

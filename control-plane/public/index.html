@@ -28,7 +28,7 @@
       <section class="hero" id="top">
         <div class="eyebrow">Open benchmark · Reproducible systems · Honest clocks</div>
         <h1>Benchmark the whole<br>vision system.</h1>
-        <p class="hero-copy">CVBench tests complete online vision systems—not isolated components. Submit one immutable <code>linux/amd64</code> OCI image. Detector, tracker, temporal memory, association, filtering, and post-processing pipelines may use one or many processes inside that image.</p>
+        <p class="hero-copy">CVBench tests complete online vision systems—not isolated components. Give the local CLI a model directory; it builds and submits one immutable <code>linux/amd64</code> OCI image. Detector, tracker, temporal memory, association, filtering, and post-processing pipelines may use one or many processes inside that image.</p>
         <div class="hero-actions">
           <a class="button primary" href="#submit">Submit a system image. <span>↗</span></a>
           <a class="button secondary" href="#contract">Read the contract</a>
@@ -64,7 +64,7 @@
         </div>
         <div class="layout-grid">
           <div class="steps">
-            <article><span>1</span><div><h3>Ship a digest</h3><p>Use a public or runner-accessible <code>linux/amd64</code> OCI image pinned as <code>registry/repo@sha256:…</code>. Tags are rejected.</p></div></article>
+            <article><span>1</span><div><h3>Freeze the image</h3><p>The CLI uploads a private immutable Docker archive directly. Maintained projects may still submit a public <code>linux/amd64</code> registry digest.</p></div></article>
             <article><span>2</span><div><h3>Connect and become ready</h3><p>Your single- or multi-process system reads <code>CVBENCH_INPUT_SOCKET</code>, connects to the progressive socket, then prints exactly <code>CVBENCH_READY</code> as one stdout line.</p></div></article>
             <article><span>3</span><div><h3>Consume ordered frames</h3><p>The same Unix stream stays open for the sequence. Detector + tracker pipelines may retain temporal memory, association state, filtering, and post-processing. Messages contain lengths, JSON metadata, then JPEG bytes.</p></div></article>
             <article><span>4</span><div><h3>Emit tracks</h3><p>Print one <code>cvbench.track/v1</code> JSON object per stdout line. Put logs on stderr. The envelope is one <code>linux/amd64</code> image, network disabled, 4 CPUs, 8192 MB total memory, a 240-second run budget, one socket-directory mount, no extra mounts, and no Docker socket.</p></div></article>
@@ -94,14 +94,35 @@ maximum run time       # 240 seconds</code></pre>
       <section class="section code-section" id="submit">
         <div class="section-intro">
           <span class="section-number">03</span>
-          <div><p class="kicker">Submit once, retry safely</p><h2>Queue a published image in one minute.</h2></div>
-          <p>Already have a public <code>linux/amd64</code> image digest? Queue it here. Your submission key stays in this page, is sent only with this request, and is never placed in a URL or browser storage.</p>
+          <div><p class="kicker">Built for model-building agents</p><h2>Build. Benchmark. Improve.</h2></div>
+          <p>Point an agent at a model directory. The local CLI builds and uploads the immutable image, follows the trusted run, and returns structured feedback while this site shows the same run live.</p>
+        </div>
+        <div class="agent-loop">
+          <div class="agent-loop-copy">
+            <p class="kicker">Preferred workflow</p>
+            <h3>Give your agent one command.</h3>
+            <p>No registry publishing, digest hunting, or hand-written API request. Authentication is stored once outside the model project.</p>
+          </div>
+          <div class="agent-command" aria-label="Agent submission command">
+            <span>model-project/</span>
+            <code>cvbench submit . --wait --json</code>
+          </div>
+          <ol class="agent-loop-steps">
+            <li><span>01</span><strong>Local build</strong><p>The CLI builds and verifies one <code>linux/amd64</code> image.</p></li>
+            <li><span>02</span><strong>Trusted run</strong><p>CVBench executes the fixed suite with no network and external accounting.</p></li>
+            <li><span>03</span><strong>Useful feedback</strong><p>The agent receives scores, prioritized findings, causes, and the next recommended test.</p></li>
+          </ol>
+          <div class="agent-bootstrap">
+            <code>pip install git+https://github.com/the-Drunken-coder/cvbench-benchmark.git</code>
+            <code>cvbench login</code>
+            <code>cvbench doctor</code>
+          </div>
         </div>
         <div class="quick-submit">
           <div class="quick-submit-heading">
             <div>
-              <p class="kicker">Quick submit</p>
-              <h3>Paste the immutable image. We handle the request.</h3>
+              <p class="kicker">Registry submission</p>
+              <h3>Already publish images? Keep the durable path.</h3>
             </div>
             <ol class="submit-prep" aria-label="Submission preparation">
               <li><span>1</span> Build</li>
@@ -186,18 +207,20 @@ response = requests.post(
 )
 response.raise_for_status()
 print(response.json()["id"])</code></pre>
-          <pre class="code-panel" data-panel="agent"><code>Goal: win the public CVBench benchmark.
+          <pre class="code-panel" data-panel="agent"><code>Goal: improve this model against CVBench.
 
-1. GET /api/v1/contract and /api/v1/openapi.json.
-2. Build and publish a Linux/amd64 OCI image.
-3. Resolve its registry digest. Never submit a mutable tag. The image may contain a multi-process detector, tracker, temporal memory, association, filtering, and post-processing system.
-4. POST image + argv + metadata with bearer auth and a unique
-   Idempotency-Key. Do not send source, build steps, shell, or env.
-5. Poll the returned Location until status is succeeded or failed.
-6. Inspect result.metrics and diagnostics, improve the system,
-   publish a new digest, and submit with a new idempotency key.</code></pre>
+1. Read /api/v1/contract and create a Dockerfile plus optional
+   cvbench.yaml in the model directory.
+2. Run: cvbench validate .
+3. Run: cvbench submit . --wait --json
+4. Keep the returned result_url for the supervising person.
+5. Read feedback.priorities, scores, and findings.
+6. Change one model variable, increment the version, and submit again.
+
+stdout is stable JSON. Human-readable build and progress events use stderr.
+Identical retries use the same content-derived idempotency identity.</code></pre>
         </div>
-        <div class="callout"><strong>Need a key?</strong> The operator bootstraps one or more keys into the Worker secret <code>SUBMISSION_API_KEYS</code>. Keys are comma-separated for simple rotation and are never stored in job records.</div>
+        <div class="callout"><strong>One-time setup:</strong> <code>cvbench login</code> stores the credential in macOS Keychain (or an owner-only config file on Linux). Agents use it without printing or copying secrets into their prompts.</div>
       </section>
 
       <section class="section results" id="results">

@@ -351,7 +351,9 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   assert.match(home, /Submit a system image\./);
   assert.match(home, /id="quick-submit-form"/);
   assert.match(home, /name="api_key" type="password"/);
-  assert.match(home, /Paste the immutable image\. We handle the request\./);
+  assert.match(home, /Give your agent one command\./);
+  assert.match(home, /cvbench submit \. --wait --json/);
+  assert.match(home, /Already publish images\? Keep the durable path\./);
   assert.match(home, /action="\/results\/"/);
   assert.doesNotMatch(home, /src="\/results\.js"/);
   assert.doesNotMatch(home, /id="status-output"/);

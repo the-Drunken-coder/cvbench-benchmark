@@ -62,6 +62,12 @@ test("health and machine-readable metadata are public", async () => {
   assert.deepEqual(openapi["x-cvbench-public-benchmark"], PUBLIC_BENCHMARK);
   assert.match(openapi.components.schemas.CreateSubmission.properties.model_version.description, /submitted system version/);
   assert.ok(openapi.components.schemas.TimingComputeSummary);
+  assert.equal(openapi.paths["/api/v1/artifacts/{id}/parts/{part_number}"].put.parameters.length, 2);
+  assert.ok(
+    openapi.paths["/api/v1/artifacts/{id}/parts/{part_number}"].put
+      .requestBody.content["application/octet-stream"],
+  );
+  assert.equal(openapi.paths["/api/v1/artifacts/{id}/complete"].post.parameters[0].name, "id");
   assert.equal(openapi.components.schemas.TimingComputeSummary.additionalProperties, false);
   assert.deepEqual(
     openapi.components.schemas.TimingComputeSummary.properties.native_source_offset_p95_ms,
@@ -75,6 +81,35 @@ test("health and machine-readable metadata are public", async () => {
   assert.ok(openapi.paths["/api/v1/internal/submissions/{id}/result"]);
   assert.ok(openapi.components.securitySchemes.operatorReadKey);
   assert.ok(openapi.components.securitySchemes.operatorAdjudicatorKey);
+});
+
+test("branch preview hosts are read-only even when they inherit production bindings", async () => {
+  const previewApp = createApp({
+    store,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+    operatorReadKeys: OPERATOR_READ_TOKEN,
+    productionHostname: "cvbench-control-plane.example.workers.dev",
+  });
+  assert.equal((await requestFor(previewApp, "/api/v1/health")).status, 200);
+  assert.equal((await requestFor(previewApp, "/api/v1/contract")).status, 200);
+  assert.equal((await requestFor(previewApp, "/api/v1/submissions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${SUBMISSION_KEY}`,
+      "content-type": "application/json",
+      "idempotency-key": "preview-must-not-write",
+    },
+    body: JSON.stringify(validBody()),
+  })).status, 403);
+  assert.equal((await requestFor(previewApp, "/api/v1/internal/leases", {
+    method: "POST",
+    headers: { authorization: `Bearer ${RUNNER_TOKEN}` },
+  })).status, 403);
+  assert.equal((await requestFor(previewApp, "/api/v1/operator/jobs", {
+    headers: { authorization: `Bearer ${OPERATOR_READ_TOKEN}` },
+  })).status, 403);
+  assert.equal(store.rows.size, 0);
 });
 
 test("public benchmark descriptor exactly matches its versioned manifest", async () => {
@@ -148,7 +183,15 @@ test("catalog assets keep honest status, MIME, and cache semantics", async () =>
 
 test("submission requires authentication and strict immutable input", async () => {
   assert.equal((await submit(validBody(), "idem-key-0001", "wrong")).status, 401);
-  assert.equal((await submit({ ...validBody(), image: "ghcr.io/example/tracker:latest" }, "idem-key-0001")).status, 422);
+  const mutable = await submit({ ...validBody(), image: "ghcr.io/example/tracker:latest" }, "idem-key-0001");
+  assert.equal(mutable.status, 422);
+  assert.match((await mutable.json()).error.message, /pinned with @sha256/);
+  const malformedArtifact = await submit(
+    { ...validBody(), image: undefined, artifact_id: "not-a-uuid" },
+    "idem-key-0001",
+  );
+  assert.equal(malformedArtifact.status, 422);
+  assert.match((await malformedArtifact.json()).error.message, /valid UUID/);
   assert.equal((await submit({ ...validBody(), command: "curl bad | sh" }, "idem-key-0001")).status, 422);
   assert.equal((await submit({ ...validBody(), argv: "python tracker.py" }, "idem-key-0001")).status, 422);
   assert.equal((await submit(validBody(), "short")).status, 400);
@@ -205,6 +248,214 @@ test("submission create, public read, idempotent replay, lease, and scored resul
   });
   assert.deepEqual(operator.raw_result.runner, scoredReport().runner);
   assert.equal((await result(created.id, { status: "failed", lease_token: leased.lease.token, error: "late" })).status, 409);
+});
+
+test("agent artifact upload queues an immutable local image and exposes live runner progress", async () => {
+  const artifactBucket = new MemoryArtifactBucket();
+  const artifactApp = createApp({
+    store,
+    artifactBucket,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+    operatorReadKeys: OPERATOR_READ_TOKEN,
+    operatorAdjudicatorCredentials: { "operator/alice": OPERATOR_WRITE_TOKEN },
+    maxSubmissionsPerHour: 2,
+    leaseSeconds: 3000,
+    predictionOverlaysRequired: false,
+  });
+  const archive = new TextEncoder().encode("immutable docker archive");
+  const archiveSha256 = await sha256("immutable docker archive");
+  const createdArtifact = await requestFor(artifactApp, "/api/v1/artifacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      archive_sha256: archiveSha256,
+      archive_size: archive.byteLength,
+      image_id: `sha256:${"d".repeat(64)}`,
+      compression: "gzip",
+    }),
+  });
+  assert.equal(createdArtifact.status, 201);
+  const artifact = await createdArtifact.json();
+  assert.equal(artifact.status, "uploading");
+  assert.equal(artifact.part_size, 16 * 1024 * 1024);
+
+  const uploaded = await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/parts/1`, {
+    method: "PUT",
+    headers: {
+      authorization: `Bearer ${SUBMISSION_KEY}`,
+      "content-length": String(archive.byteLength),
+    },
+    body: archive,
+  });
+  assert.equal(uploaded.status, 201);
+  const completedArtifact = await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/complete`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}` },
+  });
+  assert.equal(completedArtifact.status, 200);
+  assert.equal((await completedArtifact.json()).status, "ready");
+
+  const submissionResponse = await requestFor(artifactApp, "/api/v1/submissions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${SUBMISSION_KEY}`,
+      "content-type": "application/json",
+      "idempotency-key": "agent-upload-0001",
+    },
+    body: JSON.stringify({
+      artifact_id: artifact.id,
+      argv: ["python", "-m", "tracker"],
+      name: "Agent tracker",
+      model_version: "iteration-1",
+    }),
+  });
+  assert.equal(submissionResponse.status, 201);
+  const submission = await submissionResponse.json();
+  assert.equal(submission.transport.type, "uploaded_oci");
+  assert.equal(submission.progress.stage, "queued");
+
+  const leaseResponse = await requestFor(artifactApp, "/api/v1/internal/leases", {
+    method: "POST",
+    headers: { authorization: `Bearer ${RUNNER_TOKEN}` },
+  });
+  const leased = await leaseResponse.json();
+  assert.equal(leased.submission.transport.type, "uploaded_oci");
+  assert.equal(leased.submission.transport.image_id, `sha256:${"d".repeat(64)}`);
+
+  const downloaded = await requestFor(
+    artifactApp,
+    `/api/v1/internal/submissions/${submission.id}/artifact`,
+    { headers: { authorization: `Bearer ${RUNNER_TOKEN}` } },
+  );
+  assert.equal(downloaded.status, 200);
+  assert.equal(await downloaded.text(), "immutable docker archive");
+  assert.equal(downloaded.headers.get("x-cvbench-archive-sha256"), archiveSha256);
+
+  const progressResponse = await requestFor(
+    artifactApp,
+    `/api/v1/internal/submissions/${submission.id}/progress`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${RUNNER_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        lease_token: leased.lease.token,
+        stage: "benchmark_running",
+        message: "Scoring scenario 5 of 16.",
+        completed: 5,
+        total: 16,
+      }),
+    },
+  );
+  assert.equal(progressResponse.status, 200);
+  const publicRunning = await (await requestFor(artifactApp, `/api/v1/submissions/${submission.id}`)).json();
+  assert.equal(publicRunning.progress.stage, "benchmark_running");
+  assert.equal(publicRunning.progress.completed, 5);
+  assert.equal(publicRunning.progress.fraction, 5 / 16);
+});
+
+test("artifact upload creation is rate limited before abandoned multipart state accumulates", async () => {
+  const artifactBucket = new MemoryArtifactBucket();
+  const artifactApp = createApp({
+    store,
+    artifactBucket,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+    maxSubmissionsPerHour: 1,
+  });
+  const body = JSON.stringify({
+    archive_sha256: "a".repeat(64),
+    archive_size: 1024,
+    image_id: `sha256:${"b".repeat(64)}`,
+    compression: "gzip",
+  });
+  const create = () => requestFor(artifactApp, "/api/v1/artifacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-type": "application/json" },
+    body,
+  });
+
+  assert.equal((await create()).status, 201);
+  const limited = await create();
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("retry-after"), "3600");
+  assert.equal(artifactBucket.uploads.size, 1);
+});
+
+test("concurrent retries cannot replace a recorded multipart etag", async () => {
+  const artifactBucket = new MemoryArtifactBucket();
+  const artifactApp = createApp({
+    store,
+    artifactBucket,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+  });
+  const archive = new TextEncoder().encode("archive");
+  const created = await requestFor(artifactApp, "/api/v1/artifacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      archive_sha256: await sha256("archive"),
+      archive_size: archive.byteLength,
+      image_id: `sha256:${"f".repeat(64)}`,
+      compression: "gzip",
+    }),
+  });
+  const artifact = await created.json();
+  const upload = () => requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/parts/1`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-length": String(archive.byteLength) },
+    body: archive,
+  });
+  const responses = await Promise.all([upload(), upload()]);
+  assert.equal(responses.filter((response) => response.status === 201).length, 1);
+  assert.ok(responses.every((response) => [200, 201, 409].includes(response.status)));
+  const replay = await upload();
+  assert.equal(replay.status, 200);
+  assert.equal(replay.headers.get("idempotency-replayed"), "true");
+
+  const completed = await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/complete`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}` },
+  });
+  assert.equal(completed.status, 200);
+});
+
+test("artifact size mismatch becomes an aborted terminal upload", async () => {
+  const artifactBucket = new MemoryArtifactBucket(1);
+  const artifactApp = createApp({
+    store,
+    artifactBucket,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+  });
+  const archive = new TextEncoder().encode("archive");
+  const created = await requestFor(artifactApp, "/api/v1/artifacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      archive_sha256: await sha256("archive"),
+      archive_size: archive.byteLength,
+      image_id: `sha256:${"e".repeat(64)}`,
+      compression: "gzip",
+    }),
+  });
+  const artifact = await created.json();
+  await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/parts/1`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-length": String(archive.byteLength) },
+    body: archive,
+  });
+  const completed = await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/complete`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}` },
+  });
+  assert.equal(completed.status, 422);
+  assert.equal((await store.getArtifact(artifact.id)).status, "aborted");
+  assert.equal((await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/complete`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}` },
+  })).status, 409);
 });
 
 test("historical completed results retain their Version 2 benchmark envelope", async () => {
@@ -449,7 +700,10 @@ test("failed jobs require a bounded error and valid running lease", async () => 
   assert.equal((await result(created.id, { status: "failed", lease_token: leased.lease.token })).status, 422);
   const response = await result(created.id, { status: "failed", lease_token: leased.lease.token, error: "container failed readiness" });
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).error, "container failed readiness");
+  const failed = await response.json();
+  assert.equal(failed.error, "container failed readiness");
+  assert.equal(failed.agent_feedback.verdict, "fix_and_retry");
+  assert.equal(failed.agent_feedback.priorities[0].next_test, "cvbench-protocol-readiness-smoke");
 });
 
 test("result callback payloads cannot exceed the advertised budget", async () => {
@@ -1342,4 +1596,62 @@ function operatorNoteRequest(appInstance, id, token) {
 async function sha256(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+class MemoryArtifactBucket {
+  constructor(completedSizeOffset = 0) {
+    this.uploads = new Map();
+    this.objects = new Map();
+    this.completedSizeOffset = completedSizeOffset;
+    this.uploadSequence = 0;
+  }
+
+  async createMultipartUpload(key) {
+    const uploadId = crypto.randomUUID();
+    this.uploads.set(`${key}:${uploadId}`, new Map());
+    return this.resumeMultipartUpload(key, uploadId);
+  }
+
+  resumeMultipartUpload(key, uploadId) {
+    const bucket = this;
+    return {
+      key,
+      uploadId,
+      async uploadPart(partNumber, body) {
+        const bytes = new Uint8Array(await new Response(body).arrayBuffer());
+        bucket.uploadSequence += 1;
+        const etag = `etag-${partNumber}-${bucket.uploadSequence}`;
+        bucket.uploads.get(`${key}:${uploadId}`).set(partNumber, { bytes, etag });
+        return { partNumber, etag };
+      },
+      async complete(parts) {
+        const uploaded = parts.map((part) => bucket.uploads.get(`${key}:${uploadId}`).get(part.partNumber));
+        if (uploaded.some((stored, index) => !stored || stored.etag !== parts[index].etag)) {
+          throw new Error("multipart completion supplied a stale ETag");
+        }
+        const chunks = uploaded.map((stored) => stored.bytes);
+        const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        bucket.objects.set(key, bytes);
+        return { size: size + bucket.completedSizeOffset };
+      },
+      async abort() {
+        bucket.uploads.delete(`${key}:${uploadId}`);
+      },
+    };
+  }
+
+  async get(key) {
+    const bytes = this.objects.get(key);
+    return bytes ? { size: bytes.byteLength, body: new Response(bytes).body } : null;
+  }
+
+  async delete(key) {
+    this.objects.delete(key);
+  }
 }

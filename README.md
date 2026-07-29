@@ -5,7 +5,31 @@ CVBench is a local-first black-box benchmark for complete online computer-vision
 This repository owns the benchmark runner, scorer, reports, trusted execution
 worker, public control plane, and versioned execution contracts. Dataset
 authoring and certification live in the separate dataset repository; model
-experiments and submission tooling live outside this repository.
+experiments can use the agent-first submission CLI in this repository.
+
+## Agent development loop
+
+An agent needs a model directory with a `Dockerfile`, then one command:
+
+```bash
+cvbench submit . --wait --json
+```
+
+The CLI builds `linux/amd64`, infers `ENTRYPOINT` + `CMD`, creates a
+gzip-compressed immutable Docker archive, uploads it directly to private
+benchmark storage, queues the trusted run, follows progress, and returns a
+stable `cvbench.agent-result/v1` object. No public registry is required.
+
+One human setup action stores the submission credential outside the project:
+
+```bash
+cvbench login
+cvbench doctor
+```
+
+On macOS the credential is stored in Keychain. On Linux it is stored in an
+owner-only configuration file. `CVBENCH_API_KEY` remains available for
+ephemeral CI agents. See [the agent development-loop guide](docs/agent-development-loop.md).
 
 Native camera timestamps, delivery pace, and system completion are separate clocks. The versioned [timing and compute contract](docs/timing-compute-contract.md) reports cgroup CPU-seconds per native source-second and real-time factor as first-class Pareto axes; slower replay never rewrites source FPS or shares the native leaderboard class.
 
@@ -43,7 +67,10 @@ The runner mounts only a temporary socket directory, disables container networki
 ## Commands
 
 - `cvbench run --benchmark ... --system ... --output ...` executes and reports a run.
-- `cvbench validate --benchmark ... --system ...` validates configs, scenarios, frames, and ground truth.
+- `cvbench validate .` builds and verifies an agent model project for `linux/amd64`.
+- `cvbench submit . --wait --json` uploads, runs, and returns machine-readable iteration feedback.
+- `cvbench status SUBMISSION_ID --json` returns the same live record without authentication.
+- `cvbench validate --benchmark ... --system ...` validates benchmark configs, scenarios, frames, and ground truth.
 - `cvbench scenarios generate PATH` regenerates the CC0 synthetic Version 1 pack.
 
 See [Architecture](docs/architecture.md), [Protocol](docs/protocol.md), [Metrics](docs/metrics.md), [Development](docs/development.md), the [Version 1 capability matrix](docs/capability-matrix.md), and the [verbatim implementation specification](PROJECT_SPEC_VERBATIM.md).
@@ -60,6 +87,17 @@ fixture retained solely to reproduce existing benchmark results.
 
 Every scenario referenced by the current benchmark manifests is published at `/scenarios/`: 13 synthetic scenarios and 3 real-video scenarios, with exact benchmark JPEGs, full public annotations, scoring boundaries, provenance, licenses, hashes, and allowlisted first-party baseline summaries. The stable discovery endpoint is `/.well-known/cvbench-scenarios.json`; see [the catalog architecture and build contract](docs/scenario-catalog.md).
 
-The public submission queue is one Cloudflare Worker with Static Assets and D1. Every new v1 submission is assigned the fixed `public-whole-system-tracking` Version 3 suite: the same 13 deterministic synthetic scenarios and 3 dense real-video scenarios, now with 4 CPUs, 8 GiB RAM, no network, and a 240-second run budget. The assigned suite is present in queued records, runner leases, public results, the contract, and OpenAPI; callbacks for a different suite are rejected. Historical completed records retain the benchmark version and execution envelope they actually used. Untrusted submitted-system code never runs in Cloudflare: a scheduled or manually dispatched ephemeral GitHub-hosted Linux runner leases one digest-pinned OCI image and executes it through the existing Docker-isolated engine.
+The public submission queue is one Cloudflare Worker with Static Assets, D1,
+and private R2 artifact storage. Every new v1 submission is assigned the fixed
+`public-whole-system-tracking` Version 3 suite: the same 13 deterministic
+synthetic scenarios and 3 dense real-video scenarios, with 4 CPUs, 8 GiB RAM,
+no network, and a 240-second run budget. The assigned suite is present in
+queued records, runner leases, public results, the contract, and OpenAPI;
+callbacks for a different suite are rejected. Historical completed records
+retain the benchmark version and execution envelope they actually used.
+Untrusted submitted-system code never runs in Cloudflare: a scheduled or
+manually dispatched ephemeral GitHub-hosted Linux runner leases one immutable
+OCI image—either uploaded directly by the agent CLI or pinned by registry
+digest—and executes it through the existing Docker-isolated engine.
 
 See the [control-plane architecture, local commands, API lifecycle, security boundary, and Workers Builds setup](docs/control-plane.md). The [exact control-plane implementation input](docs/CONTROL_PLANE_IMPLEMENTATION_PROMPT.md) and [exact scenario-catalog implementation input](docs/SCENARIO_CATALOG_IMPLEMENTATION_PROMPT.md) are preserved alongside the original product specification.
