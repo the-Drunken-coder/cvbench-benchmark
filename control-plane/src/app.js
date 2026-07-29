@@ -96,6 +96,7 @@ export function createApp(options) {
     maxSubmissionsPerHour: boundedInteger(options.maxSubmissionsPerHour, 20, 1, 1000),
     leaseSeconds: boundedInteger(options.leaseSeconds, 3000, 60, 7200),
     predictionOverlaysRequired: options.predictionOverlaysRequired !== false,
+    productionHostname: String(options.productionHostname || "").toLowerCase(),
     maxArtifactBytes: boundedInteger(
       options.maxArtifactBytes,
       DEFAULT_MAX_ARTIFACT_BYTES,
@@ -119,6 +120,9 @@ export function createApp(options) {
 async function route(request, config) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/v1/")) return serveAsset(request, config.assets);
+  if (readOnlyPreviewRequest(request, url, config.productionHostname)) {
+    return problem(403, "preview_read_only", "Branch previews are read-only and cannot access authenticated control-plane routes.");
+  }
 
   if (request.method === "GET" && url.pathname === "/api/v1/health") {
     try {
@@ -191,13 +195,34 @@ async function route(request, config) {
       return problem(422, "invalid_artifact_part", `Each numbered part must contain 1-${ARTIFACT_PART_BYTES} bytes.`);
     }
     const multipart = config.artifactBucket.resumeMultipartUpload(artifact.objectKey, artifact.multipartUploadId);
-    const uploaded = await multipart.uploadPart(partNumber, request.body);
-    await config.store.recordArtifactPart({
-      id: artifact.id,
-      partNumber: uploaded.partNumber,
-      etag: uploaded.etag,
-      byteCount,
-    });
+    const reserved = await config.store.reserveArtifactPart({ id: artifact.id, partNumber, byteCount });
+    if (!reserved) {
+      const existing = (await config.store.listArtifactParts(artifact.id))
+        .find((part) => part.partNumber === partNumber);
+      if (existing?.etag && existing.byteCount === byteCount) {
+        return json(
+          { part_number: existing.partNumber, etag: existing.etag, byte_count: existing.byteCount },
+          200,
+          { "idempotency-replayed": "true" },
+        );
+      }
+      return problem(409, "artifact_part_already_uploaded", "Each artifact part number may be uploaded only once.");
+    }
+    let uploaded;
+    try {
+      uploaded = await multipart.uploadPart(partNumber, request.body);
+      const recorded = await config.store.recordArtifactPart({
+        id: artifact.id,
+        partNumber: uploaded.partNumber,
+        etag: uploaded.etag,
+        byteCount,
+      });
+      if (!recorded) throw new Error("artifact part reservation was lost");
+    } catch (error) {
+      await config.store.abortArtifact({ id: artifact.id, now: unixTime() }).catch(() => {});
+      await multipart.abort().catch(() => {});
+      throw error;
+    }
     return json({ part_number: uploaded.partNumber, etag: uploaded.etag, byte_count: byteCount }, 201);
   }
 
@@ -537,6 +562,20 @@ async function route(request, config) {
   }
 
   return problem(404, "not_found", "API route not found.");
+}
+
+function readOnlyPreviewRequest(request, url, productionHostname) {
+  if (
+    !productionHostname
+    || url.hostname === productionHostname
+    || url.hostname === "localhost"
+    || url.hostname === "127.0.0.1"
+  ) return false;
+  return (
+    request.method !== "GET"
+    || url.pathname.startsWith("/api/v1/internal/")
+    || url.pathname.startsWith("/api/v1/operator/")
+  );
 }
 
 async function serveAsset(request, assets) {

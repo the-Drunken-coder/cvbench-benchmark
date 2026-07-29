@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import subprocess
@@ -35,6 +36,7 @@ from scripts.run_control_plane_job import (
     cleanup_benchmark_containers,
     download_submission_artifact,
     execute_submission,
+    load_uploaded_image,
     main,
     report_progress,
     retry_api_request,
@@ -302,6 +304,34 @@ def test_uploaded_artifact_download_verifies_headers_size_and_sha256(tmp_path: P
         pytest.raises(RuntimeError, match="size and checksum"),
     ):
         download_submission_artifact("https://cvbench.test", "runner-token", submission, destination)
+
+
+def test_uploaded_artifact_load_bounds_gzip_expansion(tmp_path: Path) -> None:
+    archive = tmp_path / "image.tar.gz"
+    archive.write_bytes(gzip.compress(b"verified docker tar bytes"))
+    process = MagicMock()
+    process.stdin = MagicMock()
+    process.wait.return_value = 0
+    with patch("scripts.run_control_plane_job.subprocess.Popen", return_value=process) as popen:
+        load_uploaded_image(archive, tmp_path, {"PATH": "/usr/bin"}, max_expanded_bytes=1024)
+    popen.assert_called_once_with(
+        ["docker", "load"],
+        stdin=subprocess.PIPE,
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin"},
+    )
+    assert b"".join(call.args[0] for call in process.stdin.write.call_args_list) == b"verified docker tar bytes"
+
+    process = MagicMock()
+    process.stdin = MagicMock()
+    process.poll.return_value = None
+    process.wait.return_value = 0
+    with (
+        patch("scripts.run_control_plane_job.subprocess.Popen", return_value=process),
+        pytest.raises(RuntimeError, match="expanded image archive exceeds"),
+    ):
+        load_uploaded_image(archive, tmp_path, {"PATH": "/usr/bin"}, max_expanded_bytes=8)
+    process.kill.assert_called_once()
 
 
 def test_progress_failure_is_observable_but_never_fails_scoring(capsys: pytest.CaptureFixture[str]) -> None:

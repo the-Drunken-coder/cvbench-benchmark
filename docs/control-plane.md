@@ -33,6 +33,9 @@ The Worker source, site, migrations, and JavaScript tests live in `control-plane
 - Source repositories, build steps, shell strings, environment variables, Docker socket access, and mutable image tags are rejected.
 - Submission keys are compared through fixed-length SHA-256 digests with a constant-time byte comparison. D1 stores only the submitter-key digest.
 - `Idempotency-Key` is unique per submitter-key digest. Repeating the same body returns the existing job; changing the body returns `409`.
+- Multipart part numbers are reserved atomically before R2 receives bytes.
+  Completed identical retries replay the recorded part response; conflicting or
+  in-flight duplicates cannot replace the ETag used at completion.
 - Public reads omit contact, notes, authentication data, lease data, raw submitted-system output, stderr, and raw evidence artifacts. They return score summaries, finding statements, and (for new successful runs) a bounded visualization projection of submitted tracks.
 - Prediction playback aliases model-controlled track IDs and retains only frame-relative geometry, a small public class vocabulary, state/support/event enums, and confidence. It excludes arbitrary output fields, matching decisions, ground truth, diagnostics, paths, commands, and collector timestamps. Historical runs honestly report playback as unavailable.
 - Operator reads use `OPERATOR_READ_API_KEYS`; adjudication writes use the secret JSON mapping `OPERATOR_ADJUDICATOR_CREDENTIALS={"actor/id":"token"}`. Each credential maps to exactly one stable actor identity; invalid, generic, duplicate, or cross-scope-overlapping credentials fail closed. Submission, runner, and read-only tokens cannot write notes. All bearer verification uses the same SHA-256 digest plus constant-time comparison path; only credential digests and the mapped actor ID are stored, never bearer values.
@@ -40,7 +43,16 @@ The Worker source, site, migrations, and JavaScript tests live in `control-plane
 - A trusted runner bearer token protects leases and callbacks. Each lease also gets an independent random token, stored only as a digest, and state updates require `running -> succeeded|failed`. The 3000-second lease exceeds the 40-minute workflow timeout with callback margin.
 - Each lease advertises the Worker's one-MiB result-body budget. The trusted runner preserves the complete scored report and deterministically retains head-and-tail stderr diagnostics that fit, recording original, retained, and omitted counts in the public result.
 - Expired leases return to `queued` and can be attempted again. Old callback tokens stop working.
+- The runner verifies the compressed archive before use, then streams gzip
+  expansion into `docker load` through an independent eight-GiB expanded-byte
+  ceiling. It kills the loader on overflow or timeout instead of materializing
+  an unbounded archive on runner storage.
 - The GitHub-hosted runner is ephemeral, has read-only repository permission, runs one job, and has no broad GitHub PAT in Cloudflare.
+- Cloudflare branch versions inherit the Worker's production bindings. The
+  `PRODUCTION_HOSTNAME` gate therefore makes every non-production hostname
+  read-only before authentication or storage access: public health, contract,
+  OpenAPI, and result reads remain testable, while submissions, artifacts,
+  runner routes, and operator routes return `preview_read_only`.
 - Before invoking CVBench, the runner removes callback, Cloudflare, and GitHub secrets from the benchmark subprocess environment. The Docker adapter passes only `CVBENCH_INPUT_SOCKET` and explicitly submitted system configuration into the system-under-test image.
 - The current execution envelope is one `linux/amd64` OCI image, network disabled, 4 CPUs, 8192 MB total memory with swap disabled, a 512-process ceiling, one progressive socket-directory mount, no extra mounts, and no Docker socket. The adapter also enforces a host-aligned unprivileged UID/GID and exact image identity verification. Every submitted image gets a unique job label; both the runner and an `if: always()` workflow step force-remove and assert against survivors.
 - Container/cgroup accounting charges all processes for CPU time, RAM, and I/O. Native source duration is immutable; startup, delivery, completion, drain, processing latency, backlog, deadline misses, and late output are reported separately. GPU data is omitted unless a device is genuinely isolated.
@@ -116,19 +128,36 @@ In the Cloudflare dashboard:
 2. Set the root directory to `/control-plane`.
 3. Set the build command to `npm ci`; `postinstall` performs the one deterministic catalog build.
 4. Set the deploy command to `npx wrangler deploy`.
-5. Set the production branch to `main`. Leave branch builds enabled so pull-request branches receive preview versions.
-6. Allow Wrangler to provision the D1 binding named `DB` from
-   `wrangler.jsonc`; the narrowly scoped database name is
-   `cvbench-control-plane`.
+5. Set the production branch to `main`. Branch builds may remain enabled for
+   read-only UI previews; the committed `PRODUCTION_HOSTNAME` gate prevents
+   those version URLs from reaching authenticated, runner, operator, or
+   mutating routes even though Cloudflare versions inherit production
+   bindings.
+6. Keep the explicit production `database_id` in `wrangler.jsonc`.
+   `preview_database_id` and `preview_bucket_name` isolate `wrangler dev
+   --remote` sessions only; they do not isolate Workers Builds versions. Apply
+   all migrations to the empty development-preview database with
+   `npx wrangler d1 migrations apply DB --remote --preview` before using remote
+   development.
 7. Create the private R2 bucket declared by the `SUBMISSION_ARTIFACTS` binding:
 
    ```bash
    npx wrangler r2 bucket create cvbench-submission-artifacts
    ```
 
-   Configure an object-expiration lifecycle for uploaded archives after the
-   longest useful result-retention window. Submitted archives are private and
-   are exposed only to an authenticated trusted runner.
+   Production archives expire after 90 days; preview archives expire after
+   seven days. The result records and public playback projections are stored
+   separately and are not removed by these rules:
+
+   ```bash
+   npx wrangler r2 bucket lifecycle add cvbench-submission-artifacts \
+     cvbench-agent-images-retention agent-images/ --expire-days 90
+   npx wrangler r2 bucket lifecycle add cvbench-submission-artifacts-preview \
+     cvbench-preview-agent-images-retention agent-images/ --expire-days 7
+   ```
+
+   Submitted archives are private and are exposed only to an authenticated
+   trusted runner.
 8. After first provisioning, apply the schema from the same root:
 
    ```bash

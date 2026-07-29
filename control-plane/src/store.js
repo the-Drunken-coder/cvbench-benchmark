@@ -38,14 +38,24 @@ export class D1Store {
     return row ? deserializeArtifact(row) : null;
   }
 
-  async recordArtifactPart({ id, partNumber, etag, byteCount }) {
-    await this.db.prepare(`INSERT INTO submission_artifact_parts (artifact_id, part_number, etag, byte_count)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT (artifact_id, part_number) DO UPDATE SET
-        etag = excluded.etag, byte_count = excluded.byte_count`)
-      .bind(id, partNumber, etag, byteCount)
+  async reserveArtifactPart({ id, partNumber, byteCount }) {
+    const changed = await this.db.prepare(`INSERT INTO submission_artifact_parts (
+      artifact_id, part_number, etag, byte_count
+    ) SELECT ?, ?, '', ? FROM submission_artifacts
+      WHERE id = ? AND status = 'uploading'
+      ON CONFLICT (artifact_id, part_number) DO NOTHING`)
+      .bind(id, partNumber, byteCount, id)
       .run();
-    return this.listArtifactParts(id);
+    return Number(changed.meta?.changes || 0) === 1;
+  }
+
+  async recordArtifactPart({ id, partNumber, etag, byteCount }) {
+    const changed = await this.db.prepare(`UPDATE submission_artifact_parts
+      SET etag = ?
+      WHERE artifact_id = ? AND part_number = ? AND byte_count = ? AND etag = ''`)
+      .bind(etag, id, partNumber, byteCount)
+      .run();
+    return Number(changed.meta?.changes || 0) === 1;
   }
 
   async listArtifactParts(id) {

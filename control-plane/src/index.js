@@ -14,6 +14,7 @@ export default {
       maxSubmissionsPerHour: env.MAX_SUBMISSIONS_PER_HOUR,
       leaseSeconds: env.LEASE_SECONDS,
       maxArtifactBytes: env.MAX_ARTIFACT_BYTES,
+      productionHostname: env.PRODUCTION_HOSTNAME,
     });
     return app.fetch(request);
   },

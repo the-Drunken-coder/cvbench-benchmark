@@ -83,6 +83,35 @@ test("health and machine-readable metadata are public", async () => {
   assert.ok(openapi.components.securitySchemes.operatorAdjudicatorKey);
 });
 
+test("branch preview hosts are read-only even when they inherit production bindings", async () => {
+  const previewApp = createApp({
+    store,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+    operatorReadKeys: OPERATOR_READ_TOKEN,
+    productionHostname: "cvbench-control-plane.example.workers.dev",
+  });
+  assert.equal((await requestFor(previewApp, "/api/v1/health")).status, 200);
+  assert.equal((await requestFor(previewApp, "/api/v1/contract")).status, 200);
+  assert.equal((await requestFor(previewApp, "/api/v1/submissions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${SUBMISSION_KEY}`,
+      "content-type": "application/json",
+      "idempotency-key": "preview-must-not-write",
+    },
+    body: JSON.stringify(validBody()),
+  })).status, 403);
+  assert.equal((await requestFor(previewApp, "/api/v1/internal/leases", {
+    method: "POST",
+    headers: { authorization: `Bearer ${RUNNER_TOKEN}` },
+  })).status, 403);
+  assert.equal((await requestFor(previewApp, "/api/v1/operator/jobs", {
+    headers: { authorization: `Bearer ${OPERATOR_READ_TOKEN}` },
+  })).status, 403);
+  assert.equal(store.rows.size, 0);
+});
+
 test("public benchmark descriptor exactly matches its versioned manifest", async () => {
   const benchmarkPath = path.join(ROOT, PUBLIC_BENCHMARK.manifest);
   const benchmark = parseYaml(await readFile(benchmarkPath, "utf8"));
@@ -351,6 +380,45 @@ test("artifact upload creation is rate limited before abandoned multipart state 
   assert.equal(limited.status, 429);
   assert.equal(limited.headers.get("retry-after"), "3600");
   assert.equal(artifactBucket.uploads.size, 1);
+});
+
+test("concurrent retries cannot replace a recorded multipart etag", async () => {
+  const artifactBucket = new MemoryArtifactBucket();
+  const artifactApp = createApp({
+    store,
+    artifactBucket,
+    submissionKeys: SUBMISSION_KEY,
+    runnerToken: RUNNER_TOKEN,
+  });
+  const archive = new TextEncoder().encode("archive");
+  const created = await requestFor(artifactApp, "/api/v1/artifacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      archive_sha256: await sha256("archive"),
+      archive_size: archive.byteLength,
+      image_id: `sha256:${"f".repeat(64)}`,
+      compression: "gzip",
+    }),
+  });
+  const artifact = await created.json();
+  const upload = () => requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/parts/1`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}`, "content-length": String(archive.byteLength) },
+    body: archive,
+  });
+  const responses = await Promise.all([upload(), upload()]);
+  assert.equal(responses.filter((response) => response.status === 201).length, 1);
+  assert.ok(responses.every((response) => [200, 201, 409].includes(response.status)));
+  const replay = await upload();
+  assert.equal(replay.status, 200);
+  assert.equal(replay.headers.get("idempotency-replayed"), "true");
+
+  const completed = await requestFor(artifactApp, `/api/v1/artifacts/${artifact.id}/complete`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${SUBMISSION_KEY}` },
+  });
+  assert.equal(completed.status, 200);
 });
 
 test("artifact size mismatch becomes an aborted terminal upload", async () => {

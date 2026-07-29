@@ -13,18 +13,22 @@
     {
       "binding": "DB",
       "database_name": "cvbench-control-plane",
+      "database_id": "4ef5c8e0-1404-4247-879a-793f9d7b6d51",
+      "preview_database_id": "1a6ed367-c87a-4259-9d97-92cb6ae0d4c1",
       "migrations_dir": "migrations"
     }
   ],
   "r2_buckets": [
     {
       "binding": "SUBMISSION_ARTIFACTS",
-      "bucket_name": "cvbench-submission-artifacts"
+      "bucket_name": "cvbench-submission-artifacts",
+      "preview_bucket_name": "cvbench-submission-artifacts-preview"
     }
   ],
   "vars": {
     "MAX_SUBMISSIONS_PER_HOUR": "20",
     "LEASE_SECONDS": "3000",
-    "MAX_ARTIFACT_BYTES": "8589934592"
+    "MAX_ARTIFACT_BYTES": "8589934592",
+    "PRODUCTION_HOSTNAME": "cvbench-control-plane.laraujo123546.workers.dev"
   }
 }

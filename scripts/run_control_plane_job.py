@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import gzip
 import hashlib
 import json
 import os
@@ -43,6 +45,7 @@ SECRET_ENVIRONMENT_KEYS = {
     "GITHUB_TOKEN",
 }
 MAX_CALLBACK_BYTES = 1024 * 1024
+MAX_EXPANDED_ARTIFACT_BYTES = 8 * 1024 * 1024 * 1024
 PUBLIC_BENCHMARK_ID = "public-whole-system-tracking"
 PUBLIC_BENCHMARK_VERSION = "3.0.0"
 PUBLIC_BENCHMARK_MANIFEST = "benchmarks/public-whole-system-v3.yaml"
@@ -364,13 +367,10 @@ def execute_submission(
                 "image_load",
                 "Loading and verifying the linux/amd64 image.",
             )
-            subprocess.run(
-                ["docker", "load", "--input", str(archive)],
-                cwd=repository,
-                env=environment,
-                timeout=600,
-                check=True,
-            )
+            try:
+                load_uploaded_image(archive, repository, environment)
+            finally:
+                archive.unlink(missing_ok=True)
             image = transport["image_id"]
             inspected = subprocess.run(
                 ["docker", "image", "inspect", "--format", "{{.Id}} {{.Os}}/{{.Architecture}}", image],
@@ -555,6 +555,51 @@ def download_submission_artifact(
     if size != transport["archive_size"] or digest.hexdigest() != transport["archive_sha256"]:
         destination.unlink(missing_ok=True)
         raise RuntimeError("artifact bytes do not match the declared size and checksum")
+
+
+def load_uploaded_image(
+    archive: Path,
+    repository: Path,
+    environment: dict[str, str],
+    *,
+    max_expanded_bytes: int = MAX_EXPANDED_ARTIFACT_BYTES,
+) -> None:
+    """Stream a verified gzip archive into Docker without trusting its expansion ratio."""
+    process = subprocess.Popen(
+        ["docker", "load"],
+        stdin=subprocess.PIPE,
+        cwd=repository,
+        env=environment,
+    )
+    if process.stdin is None:
+        process.kill()
+        process.wait()
+        raise RuntimeError("docker load did not expose an input stream")
+    expanded = 0
+    started = time.monotonic()
+    try:
+        with gzip.open(archive, "rb") as source:
+            while chunk := source.read(1024 * 1024):
+                expanded += len(chunk)
+                if expanded > max_expanded_bytes:
+                    raise RuntimeError(
+                        f"expanded image archive exceeds the {max_expanded_bytes}-byte runner limit"
+                    )
+                if time.monotonic() - started > 600:
+                    raise subprocess.TimeoutExpired(["docker", "load"], 600)
+                process.stdin.write(chunk)
+        process.stdin.close()
+        remaining = max(1, 600 - int(time.monotonic() - started))
+        return_code = process.wait(timeout=remaining)
+        if return_code:
+            raise subprocess.CalledProcessError(return_code, ["docker", "load"])
+    except BaseException:
+        with contextlib.suppress(BrokenPipeError, OSError):
+            process.stdin.close()
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        raise
 
 
 def report_progress(

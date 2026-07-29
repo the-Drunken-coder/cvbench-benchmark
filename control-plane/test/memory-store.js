@@ -29,9 +29,20 @@ export class MemoryStore {
     return this.artifacts.has(id) ? clone(this.artifacts.get(id)) : null;
   }
 
+  async reserveArtifactPart(part) {
+    const key = `${part.id}:${part.partNumber}`;
+    const artifact = this.artifacts.get(part.id);
+    if (!artifact || artifact.status !== "uploading" || this.artifactParts.has(key)) return false;
+    this.artifactParts.set(key, clone({ ...part, etag: "" }));
+    return true;
+  }
+
   async recordArtifactPart(part) {
-    this.artifactParts.set(`${part.id}:${part.partNumber}`, clone(part));
-    return this.listArtifactParts(part.id);
+    const key = `${part.id}:${part.partNumber}`;
+    const reserved = this.artifactParts.get(key);
+    if (!reserved || reserved.etag || reserved.byteCount !== part.byteCount) return false;
+    this.artifactParts.set(key, clone(part));
+    return true;
   }
 
   async listArtifactParts(id) {
