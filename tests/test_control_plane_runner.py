@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 import subprocess
+import threading
 import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -332,6 +333,34 @@ def test_uploaded_artifact_load_bounds_gzip_expansion(tmp_path: Path) -> None:
     ):
         load_uploaded_image(archive, tmp_path, {"PATH": "/usr/bin"}, max_expanded_bytes=8)
     process.kill.assert_called_once()
+
+    release_write = threading.Event()
+
+    class StalledInput:
+        def write(self, _chunk: bytes) -> None:
+            release_write.wait(1)
+            raise BrokenPipeError
+
+        def close(self) -> None:
+            pass
+
+    process = MagicMock()
+    process.stdin = StalledInput()
+    process.poll.return_value = None
+    process.kill.side_effect = release_write.set
+    process.wait.return_value = -9
+    with (
+        patch("scripts.run_control_plane_job.subprocess.Popen", return_value=process),
+        pytest.raises(subprocess.TimeoutExpired),
+    ):
+        load_uploaded_image(
+            archive,
+            tmp_path,
+            {"PATH": "/usr/bin"},
+            max_expanded_bytes=1024,
+            timeout_seconds=0.01,
+        )
+    process.kill.assert_called()
 
 
 def test_progress_failure_is_observable_but_never_fails_scoring(capsys: pytest.CaptureFixture[str]) -> None:

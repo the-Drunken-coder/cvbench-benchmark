@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -563,6 +564,7 @@ def load_uploaded_image(
     environment: dict[str, str],
     *,
     max_expanded_bytes: int = MAX_EXPANDED_ARTIFACT_BYTES,
+    timeout_seconds: float = 600,
 ) -> None:
     """Stream a verified gzip archive into Docker without trusting its expansion ratio."""
     process = subprocess.Popen(
@@ -577,6 +579,17 @@ def load_uploaded_image(
         raise RuntimeError("docker load did not expose an input stream")
     expanded = 0
     started = time.monotonic()
+    deadline_expired = threading.Event()
+
+    def expire_loader() -> None:
+        if process.poll() is None:
+            deadline_expired.set()
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+
+    watchdog = threading.Timer(timeout_seconds, expire_loader)
+    watchdog.daemon = True
+    watchdog.start()
     try:
         with gzip.open(archive, "rb") as source:
             while chunk := source.read(1024 * 1024):
@@ -585,21 +598,25 @@ def load_uploaded_image(
                     raise RuntimeError(
                         f"expanded image archive exceeds the {max_expanded_bytes}-byte runner limit"
                     )
-                if time.monotonic() - started > 600:
-                    raise subprocess.TimeoutExpired(["docker", "load"], 600)
+                if deadline_expired.is_set():
+                    raise subprocess.TimeoutExpired(["docker", "load"], timeout_seconds)
                 process.stdin.write(chunk)
         process.stdin.close()
-        remaining = max(1, 600 - int(time.monotonic() - started))
+        remaining = max(0.1, timeout_seconds - (time.monotonic() - started))
         return_code = process.wait(timeout=remaining)
         if return_code:
             raise subprocess.CalledProcessError(return_code, ["docker", "load"])
-    except BaseException:
+    except BaseException as error:
         with contextlib.suppress(BrokenPipeError, OSError):
             process.stdin.close()
         if process.poll() is None:
             process.kill()
         process.wait()
+        if deadline_expired.is_set() and not isinstance(error, subprocess.TimeoutExpired):
+            raise subprocess.TimeoutExpired(["docker", "load"], timeout_seconds) from error
         raise
+    finally:
+        watchdog.cancel()
 
 
 def report_progress(

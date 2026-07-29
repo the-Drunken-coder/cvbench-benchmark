@@ -143,6 +143,7 @@ In the Cloudflare dashboard:
 
    ```bash
    npx wrangler r2 bucket create cvbench-submission-artifacts
+   npx wrangler r2 bucket create cvbench-submission-artifacts-preview
    ```
 
    Production archives expire after 90 days; preview archives expire after

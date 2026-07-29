@@ -1603,6 +1603,7 @@ class MemoryArtifactBucket {
     this.uploads = new Map();
     this.objects = new Map();
     this.completedSizeOffset = completedSizeOffset;
+    this.uploadSequence = 0;
   }
 
   async createMultipartUpload(key) {
@@ -1618,11 +1619,17 @@ class MemoryArtifactBucket {
       uploadId,
       async uploadPart(partNumber, body) {
         const bytes = new Uint8Array(await new Response(body).arrayBuffer());
-        bucket.uploads.get(`${key}:${uploadId}`).set(partNumber, bytes);
-        return { partNumber, etag: `etag-${partNumber}` };
+        bucket.uploadSequence += 1;
+        const etag = `etag-${partNumber}-${bucket.uploadSequence}`;
+        bucket.uploads.get(`${key}:${uploadId}`).set(partNumber, { bytes, etag });
+        return { partNumber, etag };
       },
       async complete(parts) {
-        const chunks = parts.map((part) => bucket.uploads.get(`${key}:${uploadId}`).get(part.partNumber));
+        const uploaded = parts.map((part) => bucket.uploads.get(`${key}:${uploadId}`).get(part.partNumber));
+        if (uploaded.some((stored, index) => !stored || stored.etag !== parts[index].etag)) {
+          throw new Error("multipart completion supplied a stale ETag");
+        }
+        const chunks = uploaded.map((stored) => stored.bytes);
         const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
         const bytes = new Uint8Array(size);
         let offset = 0;
