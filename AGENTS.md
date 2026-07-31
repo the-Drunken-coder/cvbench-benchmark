@@ -12,3 +12,9 @@ and the control plane.
 - Preserve the `public-whole-system-v3.yaml` expanded compute/runtime contract
   unless a separately versioned benchmark migration explicitly replaces it.
 - Keep submitted systems isolated from ground truth and future frames.
+
+## General implementation principles
+
+- Do not preserve backward compatibility.
+- Choose the simplest implementation that fully meets the current requirements.
+- Prefer established, well-maintained libraries over custom implementations.
