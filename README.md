@@ -83,6 +83,10 @@ New datasets are consumed only as hash-pinned immutable releases through the
 [`real-video-v2`](docs/real-video-sources.md) assets are a frozen compatibility
 fixture retained solely to reproduce existing benchmark results.
 
+The separate [recovered clean-video training corpus](docs/recovered-training-corpus.md) converts five operator-supplied
+Pixabay/Pexels originals into a local pseudo-labeled object-detection dataset. Its source videos and generated assets remain
+under ignored `.local-ingest/` storage, are explicitly evaluation-ineligible, and cannot be loaded as benchmark scenarios.
+
 ## Public scenario catalog and control plane
 
 Every scenario referenced by the current benchmark manifests is published at `/scenarios/`: 13 synthetic scenarios and 3 real-video scenarios, with exact benchmark JPEGs, full public annotations, scoring boundaries, provenance, licenses, hashes, and allowlisted first-party baseline summaries. The stable discovery endpoint is `/.well-known/cvbench-scenarios.json`; see [the catalog architecture and build contract](docs/scenario-catalog.md).

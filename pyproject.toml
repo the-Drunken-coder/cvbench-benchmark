@@ -31,6 +31,7 @@ cvbench-example-broken = "cvbench.examples.broken_tracker:main"
 cvbench-example-lite-mot = "cvbench.examples.reference_mot:lite_main"
 cvbench-example-balanced-mot = "cvbench.examples.reference_mot:balanced_main"
 cvbench-example-advanced-mot = "cvbench.examples.reference_mot:advanced_main"
+cvbench-import-recovered-videos = "cvbench.recovered_training:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cvbench"]
