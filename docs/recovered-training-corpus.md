@@ -55,3 +55,19 @@ cvbench-import-recovered-videos \
 
 `corpus.yaml` records source, model, runtime, sampling, class-count, and license provenance. `inventory.sha256` covers every
 generated asset. `review/` contains sequential 5-by-5 contact sheets whose ledger covers every sampled frame exactly once.
+
+## Public preview publication
+
+The Cloudflare site publishes five compact annotated previews at `/training/`; it does not re-host the clean stock files or
+the full local training package. `scripts/build_recovered_training_previews.py` renders the 5 FPS sampled images at 960x540
+with burned-in boxes, confidence, source time, and a training-only warning. The output manifest pins both source and preview
+hashes and records attribution and license links.
+
+The control-plane build accepts only those five transformed H.264 assets, checks every byte count and SHA-256, enforces the
+25 MiB Cloudflare Static Assets per-file limit, and publishes content-addressed media under
+`/training-media/v1/assets/sha256/`. The separate discovery document is
+`/.well-known/cvbench-training-media.json`. None of these routes are referenced by benchmark manifests or scoring.
+
+This transformation matters for provenance and licensing: the previews present CVBench's annotation work and training
+disclosure rather than redistributing the clean Pixabay/Pexels source files as standalone stock footage. Every card links to
+the creator, source page, and current license page.

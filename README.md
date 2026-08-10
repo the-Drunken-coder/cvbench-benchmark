@@ -84,8 +84,10 @@ New datasets are consumed only as hash-pinned immutable releases through the
 fixture retained solely to reproduce existing benchmark results.
 
 The separate [recovered clean-video training corpus](docs/recovered-training-corpus.md) converts five operator-supplied
-Pixabay/Pexels originals into a local pseudo-labeled object-detection dataset. Its source videos and generated assets remain
-under ignored `.local-ingest/` storage, are explicitly evaluation-ineligible, and cannot be loaded as benchmark scenarios.
+Pixabay/Pexels originals into a local pseudo-labeled object-detection dataset. Its clean source videos, full-resolution
+training images, and labels remain under ignored `.local-ingest/` storage, are explicitly evaluation-ineligible, and cannot
+be loaded as benchmark scenarios. Five transformed, annotated browser previews are published at `/training/` with a
+separate training-only catalog at `/training-media/v1/catalog.json`.
 
 ## Public scenario catalog and control plane
 

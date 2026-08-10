@@ -22,5 +22,17 @@
 /scenario-catalog/v1/scenarios/*
   Cache-Control: public, max-age=0, must-revalidate
 
+/training-media/v1/assets/*
+  Cache-Control: public, max-age=31556952, immutable
+
+/training-media/v1/catalog.json
+  Cache-Control: public, max-age=0, must-revalidate
+
+/training-media/v1/build-evidence.json
+  Cache-Control: public, max-age=0, must-revalidate
+
 /.well-known/cvbench-scenarios.json
+  Cache-Control: public, max-age=0, must-revalidate
+
+/.well-known/cvbench-training-media.json
   Cache-Control: public, max-age=0, must-revalidate
