@@ -98,13 +98,20 @@ test("training previews render and play on desktop and mobile", async (context) 
 
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   await waitForTrainingPage(desktop, server.origin);
-  const firstVideo = desktop.locator("video").first();
-  await firstVideo.evaluate(async (video) => {
-    video.muted = true;
-    await video.play();
-  });
-  await desktop.waitForFunction(() => document.querySelector("video")?.currentTime > 0.4);
-  assert.ok(await firstVideo.evaluate((video) => video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA));
+  const videos = desktop.locator("video");
+  for (let index = 0; index < await videos.count(); index += 1) {
+    const video = videos.nth(index);
+    await video.evaluate(async (element) => {
+      element.muted = true;
+      await element.play();
+    });
+    await desktop.waitForFunction(
+      (videoIndex) => document.querySelectorAll("video")[videoIndex]?.currentTime > 0.4,
+      index,
+    );
+    assert.ok(await video.evaluate((element) => element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA));
+    await video.evaluate((element) => element.pause());
+  }
 
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await waitForTrainingPage(mobile, server.origin);

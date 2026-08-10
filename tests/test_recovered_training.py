@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from cvbench.recovered_training import (
     _excluded_by_visual_audit,
     sample_frame_indices,
     verify_corpus,
+    verify_inventory,
 )
 
 
@@ -40,6 +42,18 @@ def test_verify_requires_a_training_only_manifest(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="training-only"):
         verify_corpus(tmp_path)
+
+
+def test_verify_inventory_rejects_drift(tmp_path: Path) -> None:
+    artifact = tmp_path / "samples.jsonl"
+    artifact.write_text("verified\n")
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    (tmp_path / "inventory.sha256").write_text(f"{digest}  samples.jsonl\n")
+    verify_inventory(tmp_path)
+
+    artifact.write_text("tampered\n")
+    with pytest.raises(ValueError, match="inventory hash manifest does not match"):
+        verify_inventory(tmp_path)
 
 
 def test_visual_audit_excludes_only_the_known_static_tree_root() -> None:

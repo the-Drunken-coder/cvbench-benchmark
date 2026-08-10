@@ -319,6 +319,19 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+def verify_inventory(root: Path) -> None:
+    inventory = root / "inventory.sha256"
+    if not inventory.is_file() or inventory.is_symlink():
+        raise ValueError("corpus inventory hash manifest is missing or unsafe")
+    expected = inventory.read_text().splitlines()
+    paths = sorted(path for path in root.rglob("*") if path.is_file() and path.name != "inventory.sha256")
+    if any(path.is_symlink() for path in paths):
+        raise ValueError("corpus inventory cannot contain symlinks")
+    actual = [f"{_sha256(path)}  {path.relative_to(root).as_posix()}" for path in paths]
+    if expected != actual:
+        raise ValueError("corpus inventory hash manifest does not match")
+
+
 def verify_corpus(root: Path) -> dict[str, Any]:
     manifest = yaml.safe_load((root / "corpus.yaml").read_text())
     if manifest.get("schema_version") != CORPUS_SCHEMA:
@@ -327,6 +340,7 @@ def verify_corpus(root: Path) -> dict[str, Any]:
         raise ValueError("recovered corpus must remain training-only and evaluation-ineligible")
     if manifest.get("annotation_scope") != "machine_generated_non_exhaustive_object_detections":
         raise ValueError("recovered corpus must not claim exhaustive ground truth")
+    verify_inventory(root)
 
     samples = _read_jsonl(root / "samples.jsonl")
     annotations = _read_jsonl(root / "annotations.jsonl")
@@ -373,11 +387,6 @@ def verify_corpus(root: Path) -> dict[str, Any]:
     if reviewed_images != sample_images or len(reviewed_images) != len(set(reviewed_images)):
         raise ValueError("review ledger must cover every sampled frame exactly once")
 
-    expected_inventory = (root / "inventory.sha256").read_text().splitlines()
-    actual_paths = sorted(path for path in root.rglob("*") if path.is_file() and path.name != "inventory.sha256")
-    actual_inventory = [f"{_sha256(path)}  {path.relative_to(root).as_posix()}" for path in actual_paths]
-    if expected_inventory != actual_inventory:
-        raise ValueError("corpus inventory hash manifest does not match")
     return {"samples": len(samples), "annotations": len(annotations), "clips": len(manifest["sources"])}
 
 

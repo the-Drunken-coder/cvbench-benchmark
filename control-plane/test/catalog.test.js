@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -342,6 +342,27 @@ test("unknown and private-looking source fields fail preflight before output rep
   metadata.scenarios["synthetic-acquisition"].undeclared = "must-never-publish";
   await assert.rejects(buildCatalog(output, { metadataSource: metadata }), /undeclared field undeclared/);
   assert.equal(await readFile(marker, "utf8"), "preflight marker");
+});
+
+test("failed training-media validation preserves the previous complete output", async (context) => {
+  const output = path.join(CONTROL_PLANE, "dist-test-training-failure");
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "cvbench-training-failure-"));
+  context.after(async () => {
+    await rm(output, { recursive: true, force: true });
+    await rm(temporary, { recursive: true, force: true });
+  });
+  await mkdir(output);
+  const marker = path.join(output, "complete-build-marker.txt");
+  await writeFile(marker, "previous complete output");
+  await cp(path.join(ROOT, "training-media"), path.join(temporary, "training-media"), { recursive: true });
+  const manifestPath = path.join(temporary, "training-media/recovered-videos-v1/publication.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.schema_version = "invalid";
+  await writeFile(manifestPath, JSON.stringify(manifest));
+
+  await assert.rejects(buildCatalog(output, { trainingRoot: temporary }), /invalid schema_version/);
+  assert.equal(await readFile(marker, "utf8"), "previous complete output");
+  assert.deepEqual(await readdir(output), ["complete-build-marker.txt"]);
 });
 
 test("public surfaces use safe DOM rendering, strict CSP, and corrected system terminology", async () => {

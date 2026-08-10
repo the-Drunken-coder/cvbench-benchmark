@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { cp, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -851,7 +851,25 @@ async function outputEvidence(output) {
   return { files: files.sort((a, b) => a.path.localeCompare(b.path)), total_bytes: total };
 }
 
-async function buildCatalog(output, { metadataSource } = {}) {
+async function replaceOutput(staging, output) {
+  const backup = `${staging}-previous`;
+  let movedPrevious = false;
+  try {
+    await rename(output, backup);
+    movedPrevious = true;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  try {
+    await rename(staging, output);
+  } catch (error) {
+    if (movedPrevious) await rename(backup, output);
+    throw error;
+  }
+  if (movedPrevious) await rm(backup, { recursive: true, force: true });
+}
+
+async function buildCatalog(output, { metadataSource, trainingRoot = ROOT } = {}) {
   assertSafeOutput(output);
   try {
     const outputInfo = await lstat(output);
@@ -883,83 +901,89 @@ async function buildCatalog(output, { metadataSource } = {}) {
     });
   }
 
-  await rm(output, { recursive: true, force: true });
-  await mkdir(output, { recursive: true });
-  for (const relative of STATIC_FILES) {
-    const source = path.join(PUBLIC, relative);
-    await assertedRegularFile(source, PUBLIC);
-    const destination = path.join(output, relative);
-    await mkdir(path.dirname(destination), { recursive: true });
-    await cp(source, destination);
-  }
+  const buildOutput = await mkdtemp(path.join(path.dirname(output), `.${path.basename(output)}-staging-`));
+  let installed = false;
+  try {
+    for (const relative of STATIC_FILES) {
+      const source = path.join(PUBLIC, relative);
+      await assertedRegularFile(source, PUBLIC);
+      const destination = path.join(buildOutput, relative);
+      await mkdir(path.dirname(destination), { recursive: true });
+      await cp(source, destination);
+    }
 
-  const publishedFrames = new Set();
-  const summaries = [];
-  for (const id of ids) {
-    const document = await scenarioDocument({
-      id,
-      manifestPath: scenarioPaths.get(id),
-      membership: benchmarkMembership.get(id),
-      metadata,
-      baseline: baselines[id],
-      expectedHashes,
-      realFrames,
+    const publishedFrames = new Set();
+    const summaries = [];
+    for (const id of ids) {
+      const document = await scenarioDocument({
+        id,
+        manifestPath: scenarioPaths.get(id),
+        membership: benchmarkMembership.get(id),
+        metadata,
+        baseline: baselines[id],
+        expectedHashes,
+        realFrames,
+        output: buildOutput,
+        publishedFrames,
+      });
+      const detail = await publishJson(buildOutput, `scenario-catalog/v1/scenarios/${id}.json`, document, MAX_SCENARIO_BYTES);
+      summaries.push({
+        id,
+        title: document.title,
+        description: document.description,
+        pack: document.pack,
+        failure_modes: document.failure_modes,
+        frames: document.media.frame_count,
+        fps: document.media.fps,
+        resolution: `${document.media.width}x${document.media.height}`,
+        annotation_scope: document.annotations.policy.scope,
+        license: document.provenance.source.license,
+        detail: { url: detail.url, sha256: detail.sha256, bytes: detail.bytes },
+      });
+    }
+    const catalog = {
+      schema_version: "cvbench.scenario-catalog/v1",
+      id: "cvbench-current-public-scenarios",
+      version: metadata.catalog.version,
+      status: "public",
+      generated_from: { benchmark_manifests: BENCHMARK_FILES, derivation: "exact set union" },
+      scenario_count: summaries.length,
+      all_current_scenarios_public: true,
+      disclosure: "All current scenarios, exact media, and full annotations are public and may be tuned to or memorized. Runtime isolation is an execution boundary, not a secrecy claim. Future hidden challenges are out of scope.",
+      scenarios: summaries,
+    };
+    const catalogOutput = await publishJson(buildOutput, "scenario-catalog/v1/catalog.json", catalog, MAX_CATALOG_BYTES);
+    await publishJson(buildOutput, ".well-known/cvbench-scenarios.json", {
+      schema_version: "cvbench.scenario-discovery/v1",
+      catalog_url: catalogOutput.url,
+      catalog_sha256: catalogOutput.sha256,
+      catalog_version: catalog.version,
+      scenario_count: catalog.scenario_count,
+      all_current_scenarios_public: true,
+    }, MAX_CATALOG_BYTES);
+    const trainingMedia = await publishTrainingMedia(trainingRoot, buildOutput);
+    const evidence = await outputEvidence(buildOutput);
+    await publishJson(buildOutput, "scenario-catalog/v1/build-evidence.json", {
+      schema_version: "cvbench.scenario-catalog-build/v1",
+      scenario_count: summaries.length,
+      unique_frame_assets: publishedFrames.size,
+      total_bytes_before_evidence: evidence.total_bytes,
+      files: evidence.files,
+    }, MAX_ASSET_BYTES);
+    const final = await outputEvidence(buildOutput);
+    await replaceOutput(buildOutput, output);
+    installed = true;
+    return {
       output,
-      publishedFrames,
-    });
-    const detail = await publishJson(output, `scenario-catalog/v1/scenarios/${id}.json`, document, MAX_SCENARIO_BYTES);
-    summaries.push({
-      id,
-      title: document.title,
-      description: document.description,
-      pack: document.pack,
-      failure_modes: document.failure_modes,
-      frames: document.media.frame_count,
-      fps: document.media.fps,
-      resolution: `${document.media.width}x${document.media.height}`,
-      annotation_scope: document.annotations.policy.scope,
-      license: document.provenance.source.license,
-      detail: { url: detail.url, sha256: detail.sha256, bytes: detail.bytes },
-    });
+      scenarios: summaries.length,
+      unique_frames: publishedFrames.size,
+      training_videos: trainingMedia.videos,
+      files: final.files.length,
+      bytes: final.total_bytes,
+    };
+  } finally {
+    if (!installed) await rm(buildOutput, { recursive: true, force: true });
   }
-  const catalog = {
-    schema_version: "cvbench.scenario-catalog/v1",
-    id: "cvbench-current-public-scenarios",
-    version: metadata.catalog.version,
-    status: "public",
-    generated_from: { benchmark_manifests: BENCHMARK_FILES, derivation: "exact set union" },
-    scenario_count: summaries.length,
-    all_current_scenarios_public: true,
-    disclosure: "All current scenarios, exact media, and full annotations are public and may be tuned to or memorized. Runtime isolation is an execution boundary, not a secrecy claim. Future hidden challenges are out of scope.",
-    scenarios: summaries,
-  };
-  const catalogOutput = await publishJson(output, "scenario-catalog/v1/catalog.json", catalog, MAX_CATALOG_BYTES);
-  await publishJson(output, ".well-known/cvbench-scenarios.json", {
-    schema_version: "cvbench.scenario-discovery/v1",
-    catalog_url: catalogOutput.url,
-    catalog_sha256: catalogOutput.sha256,
-    catalog_version: catalog.version,
-    scenario_count: catalog.scenario_count,
-    all_current_scenarios_public: true,
-  }, MAX_CATALOG_BYTES);
-  const trainingMedia = await publishTrainingMedia(ROOT, output);
-  const evidence = await outputEvidence(output);
-  await publishJson(output, "scenario-catalog/v1/build-evidence.json", {
-    schema_version: "cvbench.scenario-catalog-build/v1",
-    scenario_count: summaries.length,
-    unique_frame_assets: publishedFrames.size,
-    total_bytes_before_evidence: evidence.total_bytes,
-    files: evidence.files,
-  }, MAX_ASSET_BYTES);
-  const final = await outputEvidence(output);
-  return {
-    output,
-    scenarios: summaries.length,
-    unique_frames: publishedFrames.size,
-    training_videos: trainingMedia.videos,
-    files: final.files.length,
-    bytes: final.total_bytes,
-  };
 }
 
 async function main() {

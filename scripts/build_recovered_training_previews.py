@@ -16,6 +16,8 @@ from typing import Any
 import cv2
 import yaml
 
+from cvbench.recovered_training import verify_inventory
+
 OUTPUT_WIDTH = 960
 OUTPUT_HEIGHT = 540
 OUTPUT_FPS = 5
@@ -255,6 +257,7 @@ def publication_manifest(corpus: dict[str, Any], assets: list[dict[str, Any]]) -
 def build(corpus_dir: Path, output_dir: Path, ffmpeg: str) -> dict[str, Any]:
     if output_dir.exists():
         raise ValueError(f"output directory already exists: {output_dir}")
+    verify_inventory(corpus_dir)
     corpus = yaml.safe_load((corpus_dir / "corpus.yaml").read_text(encoding="utf-8"))
     assert_corpus(corpus_dir, corpus)
     samples = load_jsonl(corpus_dir / "samples.jsonl")
