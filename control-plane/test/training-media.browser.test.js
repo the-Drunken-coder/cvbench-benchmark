@@ -47,7 +47,6 @@ async function staticServer(root) {
       if ((await stat(filename)).isDirectory()) filename = path.join(filename, "index.html");
       const body = await readFile(filename);
       response.writeHead(200, {
-        "accept-ranges": "bytes",
         "content-length": body.length,
         "content-type": MIME_TYPES.get(path.extname(filename)) || "application/octet-stream",
       });

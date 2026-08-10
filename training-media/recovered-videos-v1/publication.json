@@ -3,9 +3,9 @@
   "annotation_status": "model_generated_with_visual_corrections",
   "data_role": "model_training_only",
   "derivation": {
+    "clean_source_media_redistributed": false,
     "preview_only": true,
     "sample_fps": 5,
-    "clean_source_media_redistributed": false,
     "transformation": "Sampled training images resized to 960x540 and encoded as H.264 with burned-in pseudo-label boxes, confidence, source time, and training-only disclosure."
   },
   "description": "Five transformed browser previews rendered from the local pseudo-labeled training corpus.",

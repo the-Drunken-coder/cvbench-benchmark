@@ -88,9 +88,15 @@ def assert_corpus(corpus_dir: Path, corpus: dict[str, Any]) -> None:
             raise ValueError(f"missing corpus artifact: {relative}")
 
 
-def draw_label(frame: Any, box: list[float], class_id: str, confidence: float) -> None:
-    scale_x = OUTPUT_WIDTH / 1280
-    scale_y = OUTPUT_HEIGHT / 720
+def draw_label(
+    frame: Any,
+    sample: dict[str, Any],
+    box: list[float],
+    class_id: str,
+    confidence: float,
+) -> None:
+    scale_x = OUTPUT_WIDTH / sample["width"]
+    scale_y = OUTPUT_HEIGHT / sample["height"]
     x1, y1, x2, y2 = [
         int(round(value * scale)) for value, scale in zip(box, [scale_x, scale_y, scale_x, scale_y], strict=True)
     ]
@@ -140,7 +146,7 @@ def render_frame(image_path: Path, sample: dict[str, Any], annotations: list[dic
     )
     cv2.putText(frame, title, (14, 39), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (245, 247, 240), 1, cv2.LINE_AA)
     for annotation in annotations:
-        draw_label(frame, annotation["bbox_xyxy"], annotation["class_id"], annotation["confidence"])
+        draw_label(frame, sample, annotation["bbox_xyxy"], annotation["class_id"], annotation["confidence"])
     timestamp = sample["source_timestamp_ns"] / 1_000_000_000
     proposal_state = f"proposals {len(annotations)}" if annotations else "no proposal: unknown, not background"
     footer = f"sample {sample['source_frame_index']} | source {timestamp:.3f}s | {proposal_state}"

@@ -230,6 +230,7 @@ async function publishTrainingMedia(root, output) {
       fail(`video ${id} duration does not match its sampled frames`);
     }
     if (!["training", "validation"].includes(source.split)) fail(`video ${id} has an invalid split`);
+    exactFields(source.class_counts, new Set(["dog", "person"]), `${id}.class_counts`);
     const classKeys = Object.keys(source.class_counts).sort();
     if (!classKeys.length || classKeys.some((classId) => !["dog", "person"].includes(classId))) {
       fail(`video ${id} class counts are outside the publication ontology`);
