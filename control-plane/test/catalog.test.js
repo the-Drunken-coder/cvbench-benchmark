@@ -65,6 +65,7 @@ test("two clean catalog builds are byte-identical and within budgets", async (co
   const secondSummary = build("dist-test-b");
   assert.deepEqual({ ...firstSummary, output: null }, { ...secondSummary, output: null });
   assert.equal(firstSummary.scenarios, 16);
+  assert.equal(firstSummary.training_videos, 5);
   assert.ok(firstSummary.bytes < 50 * 1024 * 1024);
   const firstFiles = await filesBelow(first);
   const secondFiles = await filesBelow(second);
@@ -125,6 +126,47 @@ test("catalog equals the benchmark union and every published hash verifies", asy
     const body = await readFile(path.join(output, item.path));
     assert.equal(body.length, item.bytes, item.path);
     assert.equal(sha256(body), item.sha256, item.path);
+  }
+});
+
+test("training media is transformed, hash-bound, and excluded from evaluation", async (context) => {
+  const output = path.join(CONTROL_PLANE, "dist-test-training-media");
+  context.after(async () => rm(output, { recursive: true, force: true }));
+  build("dist-test-training-media");
+  const discoveryBody = await readFile(path.join(output, ".well-known/cvbench-training-media.json"));
+  const discovery = JSON.parse(discoveryBody);
+  const catalogBody = await readFile(path.join(output, discovery.catalog_url));
+  assert.equal(sha256(catalogBody), discovery.catalog_sha256);
+  const catalog = JSON.parse(catalogBody);
+  assert.equal(catalog.schema_version, "cvbench.training-media-catalog/v1");
+  assert.equal(catalog.data_role, "model_training_only");
+  assert.equal(catalog.evaluation_eligible, false);
+  assert.equal(catalog.unknown_is_background, false);
+  assert.equal(catalog.derivation.preview_only, true);
+  assert.equal(catalog.derivation.clean_source_media_redistributed, false);
+  assert.equal(catalog.video_count, 5);
+  assert.equal(catalog.summary.sample_count, 504);
+  assert.equal(catalog.summary.annotation_count, 503);
+  assert.deepEqual(catalog.ontology, ["person", "dog"]);
+  for (const video of catalog.videos) {
+    assert.match(video.source_url, /^https:\/\/(?:www\.)?(?:pixabay|pexels)\.com\//);
+    assert.match(video.license_url, /^https:\/\/(?:www\.)?(?:pixabay|pexels)\.com\//);
+    assert.match(video.media.url, /^\/training-media\/v1\/assets\/sha256\/[a-f0-9]{64}\.mp4$/);
+    assert.equal(video.media.content_type, "video/mp4");
+    assert.equal(video.media.width, 960);
+    assert.equal(video.media.height, 540);
+    assert.equal(video.media.fps, 5);
+    assert.ok(video.media.bytes < 25 * 1024 * 1024);
+    const body = await readFile(path.join(output, video.media.url));
+    assert.equal(body.length, video.media.bytes);
+    assert.equal(sha256(body), video.media.sha256);
+    assert.equal(body.subarray(4, 8).toString("ascii"), "ftyp");
+    assert.match(video.poster.url, /^\/training-media\/v1\/assets\/sha256\/[a-f0-9]{64}\.jpg$/);
+    assert.equal(video.poster.content_type, "image/jpeg");
+    const poster = await readFile(path.join(output, video.poster.url));
+    assert.equal(poster.length, video.poster.bytes);
+    assert.equal(sha256(poster), video.poster.sha256);
+    assert.deepEqual([...poster.subarray(0, 3)], [0xff, 0xd8, 0xff]);
   }
 });
 
@@ -303,7 +345,7 @@ test("unknown and private-looking source fields fail preflight before output rep
 });
 
 test("public surfaces use safe DOM rendering, strict CSP, and corrected system terminology", async () => {
-  const javascript = await Promise.all(["app.js", "results.js", "operator.js", "scenario-app.js"].map((name) => readFile(path.join(CONTROL_PLANE, "public", name), "utf8")));
+  const javascript = await Promise.all(["app.js", "results.js", "operator.js", "scenario-app.js", "training.js"].map((name) => readFile(path.join(CONTROL_PLANE, "public", name), "utf8")));
   for (const source of javascript) assert.doesNotMatch(source, /\.innerHTML\s*=/i);
   assert.match(javascript[0], /crypto\.randomUUID\(\)/);
   assert.match(javascript[0], /\/results\/\?submission=/);
@@ -326,11 +368,13 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
     "control-plane/public/index.html",
     "control-plane/public/operator.html",
     "control-plane/public/scenarios/index.html",
+    "control-plane/public/training/index.html",
     "control-plane/public/results/index.html",
     "control-plane/public/app.js",
     "control-plane/public/results.js",
     "control-plane/public/operator.js",
     "control-plane/public/scenario-app.js",
+    "control-plane/public/training.js",
     "control-plane/src/app.js",
     "src/cvbench/audit.py",
   ];
@@ -362,4 +406,8 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   assert.match(results, /id="status-output"/);
   assert.match(results, /src="\/results\.js"/);
   assert.doesNotMatch(results, /src="\/app\.js"/);
+  const training = await readFile(path.join(CONTROL_PLANE, "public/training/index.html"), "utf8");
+  assert.match(training, /Training-only/);
+  assert.match(training, /id="training-video-list"/);
+  assert.match(training, /\/training-media\/v1\/catalog\.json/);
 });

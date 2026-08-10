@@ -583,21 +583,35 @@ async function serveAsset(request, assets) {
   const response = await assets.fetch(request);
   const kind = catalogAssetKind(new URL(request.url).pathname);
   const contentType = response.headers.get("content-type") || "";
-  const poisonedSuccess = response.status === 200 && (kind === "json" ? !contentType.includes("json") : !contentType.startsWith("image/jpeg"));
+  const poisonedSuccess = response.status === 200 && (
+    (kind === "json" && !contentType.includes("json"))
+    || (kind === "jpeg" && !contentType.startsWith("image/jpeg"))
+    || (kind === "mp4" && !contentType.startsWith("video/mp4"))
+  );
   if (kind && (response.status === 404 || poisonedSuccess)) {
     const missing = kind === "json"
       ? problem(404, "not_found", "Catalog resource not found.")
-      : new Response(null, { status: 404, headers: { "cache-control": "no-store", "content-type": "image/jpeg" } });
+      : new Response(null, {
+        status: 404,
+        headers: { "cache-control": "no-store", "content-type": kind === "mp4" ? "video/mp4" : "image/jpeg" },
+      });
     return secureAssetResponse(missing);
   }
   return secureAssetResponse(response);
 }
 
 function catalogAssetKind(pathname) {
-  if (pathname === "/.well-known/cvbench-scenarios.json" || /^\/scenario-catalog\/v1\/[^?#]*\.json$/.test(pathname)) {
+  if (
+    pathname === "/.well-known/cvbench-scenarios.json"
+    || pathname === "/.well-known/cvbench-training-media.json"
+    || /^\/scenario-catalog\/v1\/[^?#]*\.json$/.test(pathname)
+    || /^\/training-media\/v1\/[^?#]*\.json$/.test(pathname)
+  ) {
     return "json";
   }
   if (/^\/scenario-catalog\/v1\/assets\/sha256\/[^/]+\.jpg$/.test(pathname)) return "jpeg";
+  if (/^\/training-media\/v1\/assets\/sha256\/[a-f0-9]{64}\.jpg$/.test(pathname)) return "jpeg";
+  if (/^\/training-media\/v1\/assets\/sha256\/[a-f0-9]{64}\.mp4$/.test(pathname)) return "mp4";
   return null;
 }
 

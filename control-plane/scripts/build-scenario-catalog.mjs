@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 
 import { parse as parseYaml } from "yaml";
 
+import { publishTrainingMedia } from "./build-training-media.mjs";
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONTROL_PLANE = path.resolve(HERE, "..");
 const ROOT = path.resolve(CONTROL_PLANE, "..");
@@ -27,6 +29,8 @@ const STATIC_FILES = [
   "scenario-loader.js",
   "scenarios/index.html",
   "styles.css",
+  "training/index.html",
+  "training.js",
 ];
 const BENCHMARK_FILES = [
   "benchmarks/long-running-stability.yaml",
@@ -34,7 +38,7 @@ const BENCHMARK_FILES = [
   "benchmarks/public-whole-system-v3.yaml",
   "benchmarks/real-video-v2.yaml",
 ];
-const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".html", ".jpg", ".js", ".json"]);
+const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".html", ".jpg", ".js", ".json", ".mp4"]);
 const PRIVATE_PATH_PATTERN = /(?:^|\/)(?:\.dev\.vars|\.env(?:\.|$)|.*(?:credential|secret|contact|note|failure[-_]?packet|raw[-_]?report|d1[-_]?export|private[-_]?log).*)(?:\/|$)/i;
 const PRIVATE_FIELD_PATTERN = /(?:api[-_]?key|token|secret|credential|password|private|local[-_]?path|absolute[-_]?path|contact|notes?|failure[-_]?packet|raw[-_]?report|d1[-_]?(?:export|internal|database|binding)|operator|lease)/i;
 const PRIVATE_CONTENT_PATTERNS = [
@@ -831,7 +835,7 @@ async function outputEvidence(output) {
         if (PRIVATE_PATH_PATTERN.test(relative)) fail(`private artifact path in output: ${relative}`);
         const body = await readFile(file);
         if (body.length > MAX_ASSET_BYTES) fail(`published file exceeds 25 MiB: ${relative}`);
-        if (path.extname(relative) !== ".jpg") {
+        if (![".jpg", ".mp4"].includes(path.extname(relative))) {
           const text = body.toString("utf8");
           for (const pattern of PRIVATE_CONTENT_PATTERNS) {
             if (pattern.test(text)) fail(`private artifact content in output: ${relative}`);
@@ -938,6 +942,7 @@ async function buildCatalog(output, { metadataSource } = {}) {
     scenario_count: catalog.scenario_count,
     all_current_scenarios_public: true,
   }, MAX_CATALOG_BYTES);
+  const trainingMedia = await publishTrainingMedia(ROOT, output);
   const evidence = await outputEvidence(output);
   await publishJson(output, "scenario-catalog/v1/build-evidence.json", {
     schema_version: "cvbench.scenario-catalog-build/v1",
@@ -947,7 +952,14 @@ async function buildCatalog(output, { metadataSource } = {}) {
     files: evidence.files,
   }, MAX_ASSET_BYTES);
   const final = await outputEvidence(output);
-  return { output, scenarios: summaries.length, unique_frames: publishedFrames.size, files: final.files.length, bytes: final.total_bytes };
+  return {
+    output,
+    scenarios: summaries.length,
+    unique_frames: publishedFrames.size,
+    training_videos: trainingMedia.videos,
+    files: final.files.length,
+    bytes: final.total_bytes,
+  };
 }
 
 async function main() {

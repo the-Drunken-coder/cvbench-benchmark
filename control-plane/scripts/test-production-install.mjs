@@ -20,7 +20,7 @@ function run(command, args, cwd) {
 }
 
 try {
-  for (const relative of ["benchmarks", "datasets", "scenario-catalog", "scenarios"]) {
+  for (const relative of ["benchmarks", "datasets", "scenario-catalog", "scenarios", "training-media"]) {
     await cp(path.join(ROOT, relative), path.join(temporaryRoot, relative), { recursive: true });
   }
   const stagedControlPlane = path.join(temporaryRoot, "control-plane");
@@ -29,10 +29,13 @@ try {
   await cp(path.join(CONTROL_PLANE, "package-lock.json"), path.join(stagedControlPlane, "package-lock.json"));
   await cp(path.join(CONTROL_PLANE, "public"), path.join(stagedControlPlane, "public"), { recursive: true });
   await cp(path.join(CONTROL_PLANE, "scripts/build-scenario-catalog.mjs"), path.join(stagedControlPlane, "scripts/build-scenario-catalog.mjs"));
+  await cp(path.join(CONTROL_PLANE, "scripts/build-training-media.mjs"), path.join(stagedControlPlane, "scripts/build-training-media.mjs"));
   await run("npm", ["ci", "--omit=dev"], stagedControlPlane);
   const catalog = JSON.parse(await readFile(path.join(stagedControlPlane, "dist/scenario-catalog/v1/catalog.json"), "utf8"));
   if (catalog.scenario_count !== 16) throw new Error("production-only install did not build the complete catalog");
-  process.stdout.write("production-only npm install built all 16 scenarios\n");
+  const training = JSON.parse(await readFile(path.join(stagedControlPlane, "dist/training-media/v1/catalog.json"), "utf8"));
+  if (training.video_count !== 5) throw new Error("production-only install did not build all training previews");
+  process.stdout.write("production-only npm install built all 16 scenarios and 5 training previews\n");
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
 }

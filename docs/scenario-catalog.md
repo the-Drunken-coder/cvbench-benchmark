@@ -68,3 +68,8 @@ The design uses the existing Worker Static Assets binding and generated `dist` d
 - <https://developers.cloudflare.com/workers/static-assets/headers/>
 
 The catalog is comfortably within those limits and therefore does not need R2 or encoded video.
+
+The training-video surface is deliberately separate from this evaluation catalog. `/training/` uses five transformed H.264
+previews plus `/training-media/v1/catalog.json`; those entries are always `model_training_only`, evaluation-ineligible, and
+absent from every benchmark manifest. They use the same Static Assets deployment because each content-addressed preview is
+well below 25 MiB. Clean source videos and full training images/labels remain local and ignored.
