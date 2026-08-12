@@ -136,7 +136,6 @@ test("public benchmark descriptor exactly matches its versioned manifest", async
 
 test("catalog assets keep honest status, MIME, and cache semantics", async () => {
   const knownFrame = `${"a".repeat(64)}.jpg`;
-  const knownVideo = `${"c".repeat(64)}.mp4`;
   const assetApp = createApp({
     store,
     submissionKeys: SUBMISSION_KEY,
@@ -152,9 +151,6 @@ test("catalog assets keep honest status, MIME, and cache semantics", async () =>
         }
         if (pathname === `/scenario-catalog/v1/assets/sha256/${knownFrame}`) {
           return new Response("jpeg", { headers: { "cache-control": "public, max-age=31556952, immutable", "content-type": "image/jpeg" } });
-        }
-        if (pathname === `/training-media/v1/assets/sha256/${knownVideo}`) {
-          return new Response("mp4", { headers: { "cache-control": "public, max-age=31556952, immutable", "content-type": "video/mp4" } });
         }
         return new Response("<!doctype html><title>not found</title>", {
           status: 404,
@@ -172,10 +168,6 @@ test("catalog assets keep honest status, MIME, and cache semantics", async () =>
   assert.equal(frame.status, 200);
   assert.equal(frame.headers.get("content-type"), "image/jpeg");
   assert.match(frame.headers.get("cache-control"), /immutable/);
-  const video = await requestFor(assetApp, `/training-media/v1/assets/sha256/${knownVideo}`);
-  assert.equal(video.status, 200);
-  assert.equal(video.headers.get("content-type"), "video/mp4");
-  assert.match(video.headers.get("cache-control"), /immutable/);
 
   const missingJson = await requestFor(assetApp, "/scenario-catalog/v1/scenarios/not-present.json");
   assert.equal(missingJson.status, 404);
@@ -187,11 +179,6 @@ test("catalog assets keep honest status, MIME, and cache semantics", async () =>
   assert.equal(missingFrame.headers.get("content-type"), "image/jpeg");
   assert.doesNotMatch(missingFrame.headers.get("cache-control"), /immutable/);
   assert.equal(await missingFrame.text(), "");
-  const missingVideo = await requestFor(assetApp, `/training-media/v1/assets/sha256/${"d".repeat(64)}.mp4`);
-  assert.equal(missingVideo.status, 404);
-  assert.equal(missingVideo.headers.get("content-type"), "video/mp4");
-  assert.doesNotMatch(missingVideo.headers.get("cache-control"), /immutable/);
-  assert.equal(await missingVideo.text(), "");
 });
 
 test("submission requires authentication and strict immutable input", async () => {

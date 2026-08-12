@@ -100,9 +100,10 @@ def test_fault_objects_and_omitted_faults_are_preserved(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "changes",
     [
+        {"data_role": "training_only"},
         {"data_role": "model_training_only"},
         {"evaluation_eligible": False},
-        {"data_role": "model_training_only", "evaluation_eligible": False},
+        {"data_role": "training_only", "evaluation_eligible": False},
     ],
 )
 def test_training_only_data_cannot_be_loaded_as_an_evaluation_scenario(

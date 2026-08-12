@@ -4,8 +4,9 @@ CVBench is a local-first black-box benchmark for complete online computer-vision
 
 This repository owns the benchmark runner, scorer, reports, trusted execution
 worker, public control plane, and versioned execution contracts. Dataset
-authoring and certification live in the separate dataset repository; model
-experiments can use the agent-first submission CLI in this repository.
+authoring and certification live in
+[`cvbench-dataset`](https://github.com/the-Drunken-coder/cvbench-dataset);
+model experiments can use the agent-first submission CLI in this repository.
 
 ## Agent development loop
 
@@ -82,12 +83,6 @@ New datasets are consumed only as hash-pinned immutable releases through the
 [dataset boundary](datasets/README.md). The inline
 [`real-video-v2`](docs/real-video-sources.md) assets are a frozen compatibility
 fixture retained solely to reproduce existing benchmark results.
-
-The separate [recovered clean-video training corpus](docs/recovered-training-corpus.md) converts five operator-supplied
-Pixabay/Pexels originals into a local pseudo-labeled object-detection dataset. Its clean source videos, full-resolution
-training images, and labels remain under ignored `.local-ingest/` storage, are explicitly evaluation-ineligible, and cannot
-be loaded as benchmark scenarios. Five transformed, annotated browser previews are published at `/training/` with a
-separate training-only catalog at `/training-media/v1/catalog.json`.
 
 ## Public scenario catalog and control plane
 
