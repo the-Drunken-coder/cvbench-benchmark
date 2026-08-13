@@ -101,4 +101,12 @@ manually dispatched ephemeral GitHub-hosted Linux runner leases one immutable
 OCI image—either uploaded directly by the agent CLI or pinned by registry
 digest—and executes it through the existing Docker-isolated engine.
 
+The table-first control pane keeps four public tasks separate: `/datasets/`
+shows a read-only catalog pinned to an exact `cvbench-dataset` commit,
+`/runs/` opens a result by submission ID, `/submit/` leads with the one-command
+agent workflow and progressively reveals registry submission, and `/docs/`
+summarizes the exact runtime contract. Scenario and result viewers retain their
+dedicated routes. The private operator console is deliberately absent from the
+public navigation.
+
 See the [control-plane architecture, local commands, API lifecycle, security boundary, and Workers Builds setup](docs/control-plane.md). The [exact control-plane implementation input](docs/CONTROL_PLANE_IMPLEMENTATION_PROMPT.md) and [exact scenario-catalog implementation input](docs/SCENARIO_CATALOG_IMPLEMENTATION_PROMPT.md) are preserved alongside the original product specification.

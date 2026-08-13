@@ -18,6 +18,7 @@ const STATIC_FILES = [
   "_headers",
   "app.js",
   "404.html",
+  "dataset-catalog/v1/catalog.json",
   "index.html",
   "operator.html",
   "operator.js",
@@ -28,6 +29,7 @@ const STATIC_FILES = [
   "scenarios/index.html",
   "styles.css",
 ];
+const APP_ROUTE_DIRECTORIES = ["datasets", "docs", "runs", "submit"];
 const BENCHMARK_FILES = [
   "benchmarks/long-running-stability.yaml",
   "benchmarks/persistent-target-tracking.yaml",
@@ -201,6 +203,17 @@ function assertSafeOutput(output) {
 
 function finiteNumber(value, label) {
   if (typeof value !== "number" || !Number.isFinite(value)) fail(`${label} must be finite`);
+}
+
+function nonNegativeInteger(value, label) {
+  if (!Number.isInteger(value) || value < 0) fail(`${label} must be a non-negative integer`);
+  return value;
+}
+
+function declaredPath(value, prefix, label) {
+  requiredString(value, label);
+  if (!value.startsWith(prefix) || value.includes("..") || path.isAbsolute(value)) fail(`${label} is outside ${prefix}`);
+  return value;
 }
 
 function validateBox(box, width, height, label) {
@@ -906,6 +919,11 @@ async function buildCatalog(output, { metadataSource } = {}) {
       const destination = path.join(buildOutput, relative);
       await mkdir(path.dirname(destination), { recursive: true });
       await cp(source, destination);
+    }
+    for (const route of APP_ROUTE_DIRECTORIES) {
+      const destination = path.join(buildOutput, route, "index.html");
+      await mkdir(path.dirname(destination), { recursive: true });
+      await cp(path.join(PUBLIC, "index.html"), destination);
     }
 
     const publishedFrames = new Set();

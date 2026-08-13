@@ -24,3 +24,6 @@
 
 /.well-known/cvbench-scenarios.json
   Cache-Control: public, max-age=0, must-revalidate
+
+/dataset-catalog/v1/catalog.json
+  Cache-Control: public, max-age=0, must-revalidate

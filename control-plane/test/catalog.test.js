@@ -320,12 +320,14 @@ test("failed atomic replacement preserves the previous complete output", async (
 test("public surfaces use safe DOM rendering, strict CSP, and corrected system terminology", async () => {
   const javascript = await Promise.all(["app.js", "results.js", "operator.js", "scenario-app.js"].map((name) => readFile(path.join(CONTROL_PLANE, "public", name), "utf8")));
   for (const source of javascript) assert.doesNotMatch(source, /\.innerHTML\s*=/i);
-  assert.match(javascript[0], /crypto\.randomUUID\(\)/);
-  assert.match(javascript[0], /\/results\/\?submission=/);
+  const submitSource = javascript[0];
+  assert.doesNotMatch(submitSource, /\.innerHTML\s*=/i);
+  assert.match(submitSource, /crypto\.randomUUID\(\)/);
+  assert.match(submitSource, /\/results\/\?submission=/);
   assert.match(javascript[1], /scores\.replay_profile != null && scores\.replay_rate != null/);
   assert.match(javascript[1], /same exact frame and shared controls/);
   assert.match(javascript[1], /submitted system’s retained track projection/);
-  assert.doesNotMatch(javascript[0], /(?:local|session)Storage/);
+  assert.doesNotMatch(submitSource, /(?:local|session)Storage/);
   assert.doesNotMatch(javascript[1], /(?:local|session)Storage/);
   const headers = await readFile(path.join(CONTROL_PLANE, "public/_headers"), "utf8");
   assert.match(headers, /object-src 'none'/);
@@ -362,19 +364,24 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
     for (const pattern of banned) assert.doesNotMatch(source, pattern, relative);
   }
   const home = await readFile(path.join(CONTROL_PLANE, "public/index.html"), "utf8");
-  assert.match(home, /Benchmark the whole<br>vision system\./);
-  assert.match(home, /Submit a system image\./);
-  assert.match(home, /id="quick-submit-form"/);
-  assert.match(home, /name="api_key" type="password"/);
-  assert.match(home, /Give your agent one command\./);
+  assert.match(home, /data-view="datasets"/);
+  assert.match(home, /One command from the system project\./);
   assert.match(home, /cvbench submit \. --wait --json/);
-  assert.match(home, /Already publish images\? Keep the durable path\./);
-  assert.match(home, /action="\/results\/"/);
-  assert.doesNotMatch(home, /src="\/results\.js"/);
-  assert.doesNotMatch(home, /id="status-output"/);
+  assert.match(home, /Submit an existing registry image/);
+  assert.match(home, /type="password"/);
+  assert.match(home, /One read-only index/);
+  assert.match(submitSource, /Synced from/);
+  const builtDatasetCatalog = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dist/dataset-catalog/v1/catalog.json"), "utf8"));
+  assert.equal(builtDatasetCatalog.repository.name, "cvbench-dataset");
+  assert.match(builtDatasetCatalog.repository.revision, /^[a-f0-9]{40}$/);
+  assert.deepEqual(builtDatasetCatalog.datasets.map((dataset) => dataset.id), ["recovered-clean-videos-v1", "minimal-synthetic"]);
+  assert.equal(builtDatasetCatalog.datasets.find((dataset) => dataset.id === "recovered-clean-videos-v1").evaluationEligible, false);
+  for (const route of ["datasets", "docs", "runs", "submit"]) {
+    assert.equal(await readFile(path.join(CONTROL_PLANE, `dist/${route}/index.html`), "utf8"), await readFile(path.join(CONTROL_PLANE, "dist/index.html"), "utf8"));
+  }
   const results = await readFile(path.join(CONTROL_PLANE, "public/results/index.html"), "utf8");
   assert.match(results, /Public result studio/);
   assert.match(results, /id="status-output"/);
   assert.match(results, /src="\/results\.js"/);
-  assert.doesNotMatch(results, /src="\/app\.js"/);
+  assert.doesNotMatch(results, /operator\.html/);
 });

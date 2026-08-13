@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "cvbench.dataset-catalog/v1",
+  "repository": {
+    "name": "cvbench-dataset",
+    "url": "https://github.com/the-Drunken-coder/cvbench-dataset",
+    "revision": "847b9c2d7b17a26606de2803c088b577e1821d00"
+  },
+  "datasets": [
+    {
+      "id": "recovered-clean-videos-v1",
+      "title": "Recovered clean videos training proposals",
+      "description": "Five hash-pinned Pixabay and Pexels source videos with 5 FPS YOLOX-X model proposals. The labels are non-exhaustive draft training data, not reviewed ground truth.",
+      "path": "datasets/recovered-clean-videos-v1",
+      "collection": "dataset",
+      "version": "0.1.0",
+      "state": "draft",
+      "dataRole": "training_only",
+      "annotationScope": "sparse",
+      "evaluationEligible": false,
+      "requiredIndependentApprovals": 2,
+      "clips": [
+        {
+          "id": "pexels-18187166-dune",
+          "title": "Dune",
+          "path": "clips/pexels-18187166-dune",
+          "sourceTitle": "Florian Delee - pexels-18187166-dune",
+          "sourceUri": "https://www.pexels.com/video/a-man-walking-up-a-sand-dune-in-the-desert-18187166/",
+          "sourceSha256": "05bc3794c11d787e946d868f6d5e2d1a40b0939dc6218aa3263b138adc64e0cc",
+          "license": {
+            "name": "Pexels License",
+            "spdx": "LicenseRef-Pexels",
+            "url": "https://www.pexels.com/license/"
+          },
+          "media": {
+            "frameCount": 718,
+            "width": 3840,
+            "height": 2160,
+            "fpsNumerator": 60000,
+            "fpsDenominator": 1001
+          },
+          "annotationRows": 32,
+          "humanApprovals": 0,
+          "model": "Megvii YOLOX-X COCO 640 ONNX"
+        },
+        {
+          "id": "pixabay-112059-dog-road",
+          "title": "Dog road",
+          "path": "clips/pixabay-112059-dog-road",
+          "sourceTitle": "RuslanSikunov - pixabay-112059-dog-road",
+          "sourceUri": "https://pixabay.com/videos/young-woman-road-walk-in-the-woods-112059/",
+          "sourceSha256": "b9fdd57c97d629552dcdb6063a88827a27dfa240834d39cd47dc992207842c1b",
+          "license": {
+            "name": "Pixabay Content License",
+            "spdx": "LicenseRef-Pixabay-Content",
+            "url": "https://pixabay.com/service/license-summary/"
+          },
+          "media": {
+            "frameCount": 406,
+            "width": 3840,
+            "height": 2160,
+            "fpsNumerator": 30,
+            "fpsDenominator": 1
+          },
+          "annotationRows": 103,
+          "humanApprovals": 0,
+          "model": "Megvii YOLOX-X COCO 640 ONNX"
+        },
+        {
+          "id": "pixabay-145851-forest-bench",
+          "title": "Forest bench",
+          "path": "clips/pixabay-145851-forest-bench",
+          "sourceTitle": "Matias_Luge - pixabay-145851-forest-bench",
+          "sourceUri": "https://pixabay.com/videos/man-trees-nature-forest-145851/",
+          "sourceSha256": "b22382b1e94ca5189ff76a9ce37dd71660a36a785d0b50f897a23db363b083d9",
+          "license": {
+            "name": "Pixabay Content License",
+            "spdx": "LicenseRef-Pixabay-Content",
+            "url": "https://pixabay.com/service/license-summary/"
+          },
+          "media": {
+            "frameCount": 468,
+            "width": 3840,
+            "height": 2160,
+            "fpsNumerator": 30000,
+            "fpsDenominator": 1001
+          },
+          "annotationRows": 61,
+          "humanApprovals": 0,
+          "model": "Megvii YOLOX-X COCO 640 ONNX"
+        },
+        {
+          "id": "pixabay-212474-forest-walk",
+          "title": "Forest walk",
+          "path": "clips/pixabay-212474-forest-walk",
+          "sourceTitle": "Matthias_Groeneveld - pixabay-212474-forest-walk",
+          "sourceUri": "https://pixabay.com/videos/man-walking-forest-alone-trees-212474/",
+          "sourceSha256": "1f0b743c9b2af9fefe8c6dae05adb613b24b59c94f8bf2319d726eaee720177a",
+          "license": {
+            "name": "Pixabay Content License",
+            "spdx": "LicenseRef-Pixabay-Content",
+            "url": "https://pixabay.com/service/license-summary/"
+          },
+          "media": {
+            "frameCount": 309,
+            "width": 3840,
+            "height": 2160,
+            "fpsNumerator": 30000,
+            "fpsDenominator": 1001
+          },
+          "annotationRows": 52,
+          "humanApprovals": 0,
+          "model": "Megvii YOLOX-X COCO 640 ONNX"
+        },
+        {
+          "id": "pixabay-28855-ravine",
+          "title": "Ravine",
+          "path": "clips/pixabay-28855-ravine",
+          "sourceTitle": "spoot (Alex Kuimov) - pixabay-28855-ravine",
+          "sourceUri": "https://pixabay.com/videos/autumn-forest-tourists-walk-stream-28855/",
+          "sourceSha256": "825d9707b99ad212efc94e0dda630ba9253239b404c960002c7b385386e69641",
+          "license": {
+            "name": "Pixabay Content License",
+            "spdx": "LicenseRef-Pixabay-Content",
+            "url": "https://pixabay.com/service/license-summary/"
+          },
+          "media": {
+            "frameCount": 1467,
+            "width": 1920,
+            "height": 1080,
+            "fpsNumerator": 30,
+            "fpsDenominator": 1
+          },
+          "annotationRows": 256,
+          "humanApprovals": 0,
+          "model": "Megvii YOLOX-X COCO 640 ONNX"
+        }
+      ]
+    },
+    {
+      "id": "minimal-synthetic",
+      "title": "Minimal synthetic certification fixture",
+      "description": "Two tiny synthetic frames used only to exercise the package and release contract.",
+      "path": "examples/minimal-certified",
+      "collection": "example",
+      "version": "1.0.0",
+      "state": "certified",
+      "dataRole": "benchmark_truth",
+      "annotationScope": "exhaustive_visible",
+      "evaluationEligible": true,
+      "requiredIndependentApprovals": 2,
+      "clips": [
+        {
+          "id": "synthetic-clip",
+          "title": "Synthetic clip",
+          "path": "clips/synthetic-clip",
+          "sourceTitle": "Programmatically generated 16 by 16 fixture",
+          "sourceUri": "synthetic://cvbench/minimal-certified/synthetic-clip",
+          "sourceSha256": "c958b1b95a673db11c1a162701d8b997bdcc5b723408cd669659e07f1ba1a898",
+          "license": {
+            "name": "MIT License",
+            "spdx": "MIT",
+            "url": "https://opensource.org/license/mit"
+          },
+          "media": {
+            "frameCount": 2,
+            "width": 16,
+            "height": 16,
+            "fpsNumerator": 2,
+            "fpsDenominator": 1
+          },
+          "annotationRows": 2,
+          "humanApprovals": 2,
+          "model": null
+        }
+      ]
+    }
+  ]
+}

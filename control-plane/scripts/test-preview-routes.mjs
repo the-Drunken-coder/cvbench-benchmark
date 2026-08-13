@@ -69,6 +69,13 @@ try {
   assert(frameResponse.headers.get("content-type") === "image/jpeg", "declared frame preview route must return image/jpeg");
   assert(frameResponse.headers.get("cache-control")?.includes("immutable"), "declared frame preview route must be immutable");
 
+  const datasetCatalogResponse = await request("/dataset-catalog/v1/catalog.json");
+  assert(datasetCatalogResponse.status === 200, "dataset catalog preview route must return 200");
+  assert(datasetCatalogResponse.headers.get("content-type")?.includes("application/json"), "dataset catalog preview route must return JSON");
+  const datasetCatalog = await datasetCatalogResponse.json();
+  assert(datasetCatalog.repository.name === "cvbench-dataset", "dataset catalog must name its source repository");
+  assert(/^[a-f0-9]{40}$/.test(datasetCatalog.repository.revision), "dataset catalog must pin a full source revision");
+
   const missingJson = await request("/scenario-catalog/v1/scenarios/not-present.json");
   assert(missingJson.status === 404, "unknown scenario JSON must return 404");
   assert(missingJson.headers.get("content-type")?.includes("application/json"), "unknown scenario JSON must not return HTML");
@@ -81,6 +88,10 @@ try {
   assert(navigation.status === 200 && navigation.headers.get("content-type")?.includes("text/html"), "scenario navigation must remain available");
   const resultNavigation = await request("/results/?submission=00000000-0000-4000-8000-000000000000");
   assert(resultNavigation.status === 200 && resultNavigation.headers.get("content-type")?.includes("text/html"), "dedicated result navigation must remain available");
+  for (const route of ["/datasets/", "/docs/", "/runs/", "/submit/"]) {
+    const navigation = await request(route);
+    assert(navigation.status === 200 && navigation.headers.get("content-type")?.includes("text/html"), `${route} navigation must remain available`);
+  }
   const unknownPage = await request("/not-a-real-page");
   assert(unknownPage.status === 404, "unknown navigation must return the 404 page");
   process.stdout.write("Worker preview routes preserve navigation and honest catalog/media failures\n");

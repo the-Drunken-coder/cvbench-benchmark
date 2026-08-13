@@ -23,6 +23,35 @@ human browser -> public result page     | result      | lease + progress
 
 The Worker source, site, migrations, and JavaScript tests live in `control-plane/`. The execution bridge is `scripts/run_control_plane_job.py`, and `.github/workflows/control-plane-runner.yml` schedules it.
 
+## Public control pane
+
+The public UI is static HTML, CSS, and one small browser module in the existing
+Worker asset pipeline. It has four clear destinations:
+
+- `/datasets/` is a table-first, read-only view generated from an exact
+  `cvbench-dataset` commit;
+- `/runs/` opens the dedicated public result page for one submission UUID;
+- `/submit/` leads with `cvbench submit . --wait --json` and keeps registry
+  submission behind a disclosure;
+- `/docs/` contains the compact runtime contract and links to the exact JSON,
+  OpenAPI, scenarios, and repositories.
+
+`/scenarios/` and `/results/` remain focused viewers. `/operator.html` remains
+private and is not linked from the public application shell.
+
+Refresh the checked-in dataset projection from a current local Dataset
+checkout with one command:
+
+```bash
+cd control-plane
+npm run sync:datasets -- /path/to/cvbench-dataset
+```
+
+The sync selects only public package, clip, source, license, media, model, and
+review-count metadata into `/dataset-catalog/v1/catalog.json`. Source media,
+annotations, reviewer identities, local paths, and mutable Studio authoring
+state are not copied into the hosted catalog.
+
 ## Security properties
 
 - Artifact creation and submission require `Authorization: Bearer ...`.
@@ -74,7 +103,7 @@ cd control-plane
 npm ci
 npm test
 npx wrangler d1 migrations apply cvbench-control-plane --local
-npx wrangler dev
+npm run dev
 ```
 
 Create `control-plane/.dev.vars` with local-only values (the file is ignored by Git):
@@ -94,7 +123,16 @@ curl -sS http://localhost:8787/api/v1/contract
 curl -sS http://localhost:8787/api/v1/openapi.json
 ```
 
-`npm run build` deterministically creates the allowlisted Static Assets tree in `control-plane/dist`, including the complete public scenario catalog. `npm test` exercises the catalog build plus a complete in-memory HTTP lifecycle: authenticated creation with the fixed 16-scenario assignment, idempotent replay, public read, lease, benchmark-bound scored result callback, terminal-state rejection, failure callback, rate limit, payload limit, and lease expiry. It uses a safe baseline system-image reference and a representative scored CVBench report; it does not execute Docker.
+`npm run build` deterministically creates the allowlisted Static Assets tree in
+`control-plane/dist`, including the dataset and complete public scenario
+catalogs. `npm run dev` always performs that build before starting Wrangler, so
+the Worker never serves a stale UI. `npm test`
+exercises the UI and catalog build plus a complete in-memory HTTP lifecycle:
+authenticated creation with the fixed 16-scenario assignment, idempotent
+replay, public read, lease, benchmark-bound scored result callback,
+terminal-state rejection, failure callback, rate limit, payload limit, and
+lease expiry. It uses a safe baseline system-image reference and a
+representative scored CVBench report; it does not execute Docker.
 
 `npm ci` also invokes this build through the package's `postinstall` hook, and the build-time YAML parser is a production dependency so `npm ci --omit=dev` follows the same contract. An explicit `npm run build` remains useful only for local regeneration after source edits.
 
