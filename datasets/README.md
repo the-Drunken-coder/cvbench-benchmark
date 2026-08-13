@@ -3,7 +3,8 @@
 This repository runs and scores benchmarks. It does not create, reconcile,
 review, or certify benchmark truth.
 
-New datasets arrive only as immutable releases from the dataset repository.
+New datasets arrive only as immutable releases from
+[`cvbench-dataset`](https://github.com/the-Drunken-coder/cvbench-dataset).
 Each benchmark upgrade pins one deterministic
 `<dataset-id>-<version>.tar.gz` archive with
 [`cvbench.dataset-lock/v1`](../schemas/dataset-lock-v1.schema.json), then installs

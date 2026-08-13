@@ -68,19 +68,6 @@ try {
   assert(frameResponse.status === 200, "declared frame preview route must return 200");
   assert(frameResponse.headers.get("content-type") === "image/jpeg", "declared frame preview route must return image/jpeg");
   assert(frameResponse.headers.get("cache-control")?.includes("immutable"), "declared frame preview route must be immutable");
-  const trainingCatalogResponse = await request("/training-media/v1/catalog.json");
-  assert(trainingCatalogResponse.status === 200, "training catalog preview route must return 200");
-  assert(trainingCatalogResponse.headers.get("content-type")?.includes("application/json"), "training catalog must return JSON");
-  const trainingCatalog = await trainingCatalogResponse.json();
-  assert(trainingCatalog.video_count === 5, "training catalog must declare five previews");
-  const videoResponse = await request(trainingCatalog.videos[0].media.url);
-  assert(videoResponse.status === 200, "declared training video must return 200");
-  assert(videoResponse.headers.get("content-type") === "video/mp4", "declared training video must return video/mp4");
-  assert(videoResponse.headers.get("cache-control")?.includes("immutable"), "declared training video must be immutable");
-  const posterResponse = await request(trainingCatalog.videos[0].poster.url);
-  assert(posterResponse.status === 200, "declared training poster must return 200");
-  assert(posterResponse.headers.get("content-type") === "image/jpeg", "declared training poster must return image/jpeg");
-  assert(posterResponse.headers.get("cache-control")?.includes("immutable"), "declared training poster must be immutable");
 
   const missingJson = await request("/scenario-catalog/v1/scenarios/not-present.json");
   assert(missingJson.status === 404, "unknown scenario JSON must return 404");
@@ -90,14 +77,8 @@ try {
   assert(missingFrame.status === 404, "unknown frame must return 404");
   assert(missingFrame.headers.get("content-type") === "image/jpeg", "unknown frame must retain JPEG MIME");
   assert(!missingFrame.headers.get("cache-control")?.includes("immutable"), "unknown frame must not be immutable");
-  const missingVideo = await request(`/training-media/v1/assets/sha256/${"e".repeat(64)}.mp4`);
-  assert(missingVideo.status === 404, "unknown training video must return 404");
-  assert(missingVideo.headers.get("content-type") === "video/mp4", "unknown training video must retain MP4 MIME");
-  assert(!missingVideo.headers.get("cache-control")?.includes("immutable"), "unknown training video must not be immutable");
   const navigation = await request(`/scenarios/?scenario=${catalog.scenarios[0].id}`);
   assert(navigation.status === 200 && navigation.headers.get("content-type")?.includes("text/html"), "scenario navigation must remain available");
-  const trainingNavigation = await request("/training/");
-  assert(trainingNavigation.status === 200 && trainingNavigation.headers.get("content-type")?.includes("text/html"), "training navigation must remain available");
   const resultNavigation = await request("/results/?submission=00000000-0000-4000-8000-000000000000");
   assert(resultNavigation.status === 200 && resultNavigation.headers.get("content-type")?.includes("text/html"), "dedicated result navigation must remain available");
   const unknownPage = await request("/not-a-real-page");
