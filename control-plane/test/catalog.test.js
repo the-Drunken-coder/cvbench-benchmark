@@ -364,7 +364,7 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
     for (const pattern of banned) assert.doesNotMatch(source, pattern, relative);
   }
   const home = await readFile(path.join(CONTROL_PLANE, "public/index.html"), "utf8");
-  assert.match(home, /data-view="datasets"/);
+  assert.match(home, /<section class="pane" data-view="datasets">/);
   assert.match(home, /One command from the system project\./);
   assert.match(home, /cvbench submit \. --wait --json/);
   assert.match(home, /Submit an existing registry image/);

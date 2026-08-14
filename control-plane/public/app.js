@@ -1,5 +1,5 @@
 const page = ({ "/": "datasets", "/datasets/": "datasets", "/runs/": "runs", "/submit/": "submit", "/docs/": "docs" })[window.location.pathname] ?? "datasets";
-document.querySelector(`[data-view="${page}"]`).hidden = false;
+for (const view of document.querySelectorAll("[data-view]")) view.hidden = view.dataset.view !== page;
 document.querySelector(`[data-nav="${page}"]`)?.setAttribute("aria-current", "page");
 document.title = `${page[0].toUpperCase()}${page.slice(1)} · CVBench`;
 
