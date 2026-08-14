@@ -39,8 +39,8 @@ Worker asset pipeline. It has four clear destinations:
 `/scenarios/` and `/results/` remain focused viewers. `/operator.html` remains
 private and is not linked from the public application shell.
 
-Refresh the checked-in dataset projection from a current local Dataset
-checkout with one command:
+Refresh the checked-in dataset projection from a clean local Dataset checkout
+at the pinned `847b9c2d7b17a26606de2803c088b577e1821d00` revision with one command:
 
 ```bash
 cd control-plane
@@ -49,13 +49,13 @@ npm run sync:datasets -- /path/to/cvbench-dataset
 
 The sync selects only public package, clip, source, license, media, model, and
 review-count metadata into `/dataset-catalog/v1/catalog.json`. Small browser
-previews are bound to the exact source hash and published for dataset
+previews are bound to their exact content hash and published for dataset
 inspection. Original media, annotations, reviewer identities, local paths, and
 mutable Studio authoring state are not copied into the hosted catalog.
 
 Preview files use silent H.264 at 854 pixels wide, 30 FPS, CRF 30, `yuv420p`,
 and fast-start metadata. Their filenames include the first 12 characters of the
-pinned source SHA-256; the sync command records each preview's full hash and
+preview SHA-256; the sync command records each preview's full hash and
 byte count.
 
 ## Security properties

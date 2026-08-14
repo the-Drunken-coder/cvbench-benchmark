@@ -58,19 +58,23 @@ function staticServer() {
 
 test("table-first control pane keeps datasets, submission, and runs focused", async () => {
   const server = staticServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const browser = await chromium.launch({ executablePath: await chromeExecutable(), headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-  const consoleErrors = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
-  });
-  const origin = `http://127.0.0.1:${server.address().port}`;
+  let browser;
+  let listening = false;
 
   try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    listening = true;
+    browser = await chromium.launch({ executablePath: await chromeExecutable(), headless: true });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    const consoleErrors = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    const origin = `http://127.0.0.1:${server.address().port}`;
+
     await page.goto(`${origin}/datasets/`);
     await page.getByRole("heading", { name: "Datasets", exact: true }).waitFor();
     await page.getByRole("heading", { name: "Recovered clean videos training proposals" }).waitFor();
@@ -89,8 +93,8 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
     assert.match(await page.locator(".clip-detail").textContent(), /YOLOX-X/);
     const clipVideo = page.locator("#clip-video");
     await page.getByText("Browser preview · 49 seconds").waitFor();
-    assert.match(await clipVideo.getAttribute("src"), /pixabay-28855-ravine\.825d9707b99a\.mp4$/);
-    assert.ok(await clipVideo.evaluate((video) => video.readyState >= HTMLMediaElement.HAVE_METADATA));
+    assert.match(await clipVideo.getAttribute("src"), /pixabay-28855-ravine\.04dbf8f38f3b\.mp4$/);
+    await page.waitForFunction(() => document.querySelector("#clip-video")?.readyState >= HTMLMediaElement.HAVE_METADATA);
     assert.ok(await clipVideo.evaluate((video) => video.duration > 48 && video.duration < 50));
     await page.getByLabel("Search").fill("no matching dataset");
     assert.equal(await page.locator(".dataset-table tbody tr").count(), 0);
@@ -115,11 +119,16 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
     await page.getByRole("button", { name: "Open run" }).click();
     await page.getByText("Enter the complete submission UUID.").waitFor();
 
+    await page.setViewportSize({ width: 580, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
     assert.deepEqual(consoleErrors, []);
   } finally {
-    await browser.close();
-    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    try {
+      await browser?.close();
+    } finally {
+      if (listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
   }
 });

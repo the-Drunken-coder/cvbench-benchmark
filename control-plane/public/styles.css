@@ -384,7 +384,7 @@ footer > div a { font: 700 .72rem var(--mono); text-transform: uppercase; }
   .control-pane .site-header nav { order: 3; width: 100%; display: flex; overflow-x: auto; }
   .control-pane .site-header nav a { white-space: nowrap; }
   .pane-heading { align-items: start; }
-  .pane-filters { grid-template-columns: minmax(180px, 1fr) 170px 170px; }
+  .pane-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dataset-detail { grid-template-columns: 1fr; }
 }
 

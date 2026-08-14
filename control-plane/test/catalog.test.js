@@ -378,7 +378,7 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   const recoveredDataset = builtDatasetCatalog.datasets.find((dataset) => dataset.id === "recovered-clean-videos-v1");
   assert.equal(recoveredDataset.evaluationEligible, false);
   for (const clip of recoveredDataset.clips) {
-    assert.equal(clip.preview.url, `/dataset-catalog/v1/previews/${clip.id}.${clip.sourceSha256.slice(0, 12)}.mp4`);
+    assert.equal(clip.preview.url, `/dataset-catalog/v1/previews/${clip.id}.${clip.preview.sha256.slice(0, 12)}.mp4`);
     const preview = await readFile(path.join(CONTROL_PLANE, "dist", clip.preview.url));
     assert.equal(preview.length, clip.preview.bytes);
     assert.equal(sha256(preview), clip.preview.sha256);

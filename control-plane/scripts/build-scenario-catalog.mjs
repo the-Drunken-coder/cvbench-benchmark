@@ -15,11 +15,11 @@ const PUBLIC = path.join(CONTROL_PLANE, "public");
 const CATALOG_SOURCE = path.join(ROOT, "scenario-catalog");
 const DEFAULT_OUTPUT = path.join(CONTROL_PLANE, "dist");
 const DATASET_PREVIEW_FILES = [
-  "dataset-catalog/v1/previews/pexels-18187166-dune.05bc3794c11d.mp4",
-  "dataset-catalog/v1/previews/pixabay-112059-dog-road.b9fdd57c97d6.mp4",
-  "dataset-catalog/v1/previews/pixabay-145851-forest-bench.b22382b1e94c.mp4",
-  "dataset-catalog/v1/previews/pixabay-212474-forest-walk.1f0b743c9b2a.mp4",
-  "dataset-catalog/v1/previews/pixabay-28855-ravine.825d9707b99a.mp4",
+  "dataset-catalog/v1/previews/pexels-18187166-dune.9465c0693330.mp4",
+  "dataset-catalog/v1/previews/pixabay-112059-dog-road.863b942a5735.mp4",
+  "dataset-catalog/v1/previews/pixabay-145851-forest-bench.99c06564156e.mp4",
+  "dataset-catalog/v1/previews/pixabay-212474-forest-walk.5cb9ec9618ef.mp4",
+  "dataset-catalog/v1/previews/pixabay-28855-ravine.04dbf8f38f3b.mp4",
 ];
 const STATIC_FILES = [
   "_headers",

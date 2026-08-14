@@ -23,33 +23,59 @@ function required(value, label) {
 }
 
 function revision() {
-  const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" });
-  const commit = result.stdout?.trim();
-  if (result.status !== 0 || !/^[a-f0-9]{40}$/.test(commit)) throw new Error("dataset repository must be a Git checkout at a full commit");
-  return commit;
-}
+  const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: repository, encoding: "utf8" });
+  if (status.status !== 0) throw new Error("dataset repository must be a Git checkout");
+  if (status.stdout.trim()) throw new Error("dataset repository must be clean before syncing");
 
-async function json(file) {
-  return JSON.parse(await readFile(file, "utf8"));
+  const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" });
+  const commit = head.stdout?.trim();
+  if (head.status !== 0 || !/^[a-f0-9]{40}$/.test(commit)) throw new Error("dataset repository must be at a full commit");
+  return commit;
 }
 
 async function jsonLines(file) {
   return (await readFile(file, "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
 
-async function preview(id, sourceSha256) {
-  const filename = `${id}.${sourceSha256.slice(0, 12)}.mp4`;
+async function preview(id) {
   try {
+    const candidates = (await readdir(PREVIEWS))
+      .filter((filename) => filename.startsWith(`${id}.`) && filename.endsWith(".mp4"));
+    if (candidates.length === 0) return null;
+    if (candidates.length > 1) throw new Error(`${id} has multiple browser previews`);
+
+    const [filename] = candidates;
     const body = await readFile(path.join(PREVIEWS, filename));
+    const sha256 = createHash("sha256").update(body).digest("hex");
+    if (filename !== `${id}.${sha256.slice(0, 12)}.mp4`) {
+      throw new Error(`${id} preview filename does not match its content hash`);
+    }
     return {
       url: `/dataset-catalog/v1/previews/${filename}`,
-      sha256: createHash("sha256").update(body).digest("hex"),
+      sha256,
       bytes: body.length,
     };
   } catch (error) {
     if (error?.code === "ENOENT") return null;
     throw error;
   }
+}
+
+function sha256(body) {
+  return createHash("sha256").update(body).digest("hex");
+}
+
+function humanApprovals(reviews, clipId, artifacts) {
+  return new Set(reviews
+    .filter((review) => review.clip_id === clipId
+      && review.scope === "all_annotations"
+      && review.decision === "approve"
+      && review.reviewer?.kind === "human"
+      && review.reviewer?.independent === true
+      && review.artifacts?.video_sha256 === artifacts.video_sha256
+      && review.artifacts?.tracks_sha256 === artifacts.tracks_sha256
+      && review.artifacts?.source_sha256 === artifacts.source_sha256)
+    .map((review) => review.reviewer.id)).size;
 }
 
 async function roots() {
@@ -73,10 +99,17 @@ async function readDataset(declaration) {
   const clips = await Promise.all(descriptor.clips.map(async ({ id, path: clipPath }) => {
     if (clipPath !== `clips/${id}`) throw new Error(`${declaration.path} contains an invalid clip path`);
     const clipRoot = path.join(root, clipPath);
-    const source = await json(path.join(clipRoot, "source.json"));
+    const sourceBody = await readFile(path.join(clipRoot, "source.json"));
+    const tracksBody = await readFile(path.join(clipRoot, "tracks.jsonl"));
+    const source = JSON.parse(sourceBody);
     const reviews = await jsonLines(path.join(clipRoot, "review.jsonl"));
     const model = source.model_runs?.[0]?.model_name ?? null;
     const sourceSha256 = required(source.source?.sha256, `${id}.source.sha256`);
+    const artifacts = {
+      video_sha256: sourceSha256,
+      tracks_sha256: sha256(tracksBody),
+      source_sha256: sha256(sourceBody),
+    };
     return {
       id,
       title: title(id),
@@ -96,10 +129,10 @@ async function readDataset(declaration) {
         fpsNumerator: required(source.media?.fps_numerator, `${id}.media.fps_numerator`),
         fpsDenominator: required(source.media?.fps_denominator, `${id}.media.fps_denominator`),
       },
-      annotationRows: (await jsonLines(path.join(clipRoot, "tracks.jsonl"))).length,
-      humanApprovals: reviews.filter((review) => review.decision === "approve" && review.reviewer?.kind === "human" && review.reviewer?.independent === true).length,
+      annotationRows: tracksBody.toString("utf8").split("\n").filter(Boolean).length,
+      humanApprovals: humanApprovals(reviews, id, artifacts),
       model,
-      preview: await preview(id, sourceSha256),
+      preview: await preview(id),
     };
   }));
   return {
@@ -118,11 +151,13 @@ async function readDataset(declaration) {
   };
 }
 
+const sourceRevision = revision();
 const datasets = await Promise.all((await roots()).map(readDataset));
 datasets.sort((left, right) => left.collection.localeCompare(right.collection) || left.id.localeCompare(right.id));
+if (revision() !== sourceRevision) throw new Error("dataset repository changed while syncing");
 const catalog = {
   schemaVersion: "cvbench.dataset-catalog/v1",
-  repository: { name: "cvbench-dataset", url: REPOSITORY_URL, revision: revision() },
+  repository: { name: "cvbench-dataset", url: REPOSITORY_URL, revision: sourceRevision },
   datasets,
 };
 await writeFile(OUTPUT, `${JSON.stringify(catalog, null, 2)}\n`);
