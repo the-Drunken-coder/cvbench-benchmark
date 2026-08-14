@@ -106,6 +106,9 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
     await page.getByText("No browser preview is published for this clip.").waitFor();
     await page.getByLabel("Search").fill("ravine");
     assert.equal(await page.locator(".dataset-table tbody tr").count(), 1);
+    await page.getByLabel("Search").press("Enter");
+    assert.equal(page.url(), `${origin}/datasets/`);
+    assert.equal(await page.locator(".dataset-table tbody tr").count(), 1);
     await page.getByRole("button", { name: "Ravine" }).click();
     await page.getByRole("heading", { name: "Ravine", exact: true }).waitFor();
     assert.match(await page.locator(".clip-detail").textContent(), /1,467/);

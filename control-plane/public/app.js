@@ -150,6 +150,7 @@ if (page === "datasets") {
     renderTrackingBoxes();
   });
   toggle.addEventListener("change", renderTrackingBoxes);
+  byId("dataset-filters").addEventListener("submit", (event) => event.preventDefault());
   loadDatasets().catch((error) => {
     setText("dataset-status", error instanceof Error ? error.message : "Dataset catalog could not be loaded.");
     byId("dataset-status").classList.add("error");

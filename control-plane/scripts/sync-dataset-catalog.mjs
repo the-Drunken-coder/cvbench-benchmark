@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,13 @@ if (!repository) throw new Error("usage: npm run sync:datasets -- /path/to/cvben
 function required(value, label) {
   if (value === undefined || value === null || value === "") throw new Error(`${label} is required`);
   return value;
+}
+
+async function settleAll(promises) {
+  const results = await Promise.allSettled(promises);
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure) throw failure.reason;
+  return results.map((result) => result.value);
 }
 
 function revision() {
@@ -43,7 +50,7 @@ function trackingBoxes(rows, clipId, media) {
   return rows.map((row, index) => {
     const label = `${clipId}.tracks[${index}]`;
     const timestampNs = required(row.source_timestamp_ns, `${label}.source_timestamp_ns`);
-    if (!Number.isSafeInteger(timestampNs) || timestampNs < previousTimestamp) {
+    if (!Number.isSafeInteger(timestampNs) || timestampNs < 0 || timestampNs < previousTimestamp) {
       throw new Error(`${label}.source_timestamp_ns must be a sorted non-negative integer`);
     }
     previousTimestamp = timestampNs;
@@ -61,7 +68,7 @@ function trackingBoxes(rows, clipId, media) {
   });
 }
 
-async function tracking(id, scope, rows, media) {
+async function tracking(directory, id, scope, rows, media) {
   const document = {
     schemaVersion: "cvbench.browser-boxes/v1",
     scope,
@@ -70,7 +77,7 @@ async function tracking(id, scope, rows, media) {
   const body = Buffer.from(`${JSON.stringify(document)}\n`);
   const digest = sha256(body);
   const filename = `${id}.${digest.slice(0, 12)}.json`;
-  await writeFile(path.join(TRACKING, filename), body);
+  await writeFile(path.join(directory, filename), body);
   return {
     url: `/dataset-catalog/v1/tracking/${filename}`,
     sha256: digest,
@@ -134,10 +141,10 @@ function title(id) {
   return (/[0-9]/.test(parts[1] ?? "") ? parts.slice(2) : parts).join(" ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
-async function readDataset(declaration) {
+async function readDataset(declaration, trackingDirectory) {
   const root = path.join(repository, declaration.path);
   const descriptor = parseYaml(await readFile(path.join(root, "dataset.yaml"), "utf8"));
-  const clips = await Promise.all(descriptor.clips.map(async ({ id, path: clipPath }) => {
+  const clips = await settleAll(descriptor.clips.map(async ({ id, path: clipPath }) => {
     if (clipPath !== `clips/${id}`) throw new Error(`${declaration.path} contains an invalid clip path`);
     const clipRoot = path.join(root, clipPath);
     const sourceBody = await readFile(path.join(clipRoot, "source.json"));
@@ -156,7 +163,7 @@ async function readDataset(declaration) {
     };
     const clipPreview = await preview(id);
     const clipTracking = clipPreview && tracks.length
-      ? await tracking(id, required(descriptor.annotation_scope, `${declaration.path}.annotation_scope`), tracks, media)
+      ? await tracking(trackingDirectory, id, required(descriptor.annotation_scope, `${declaration.path}.annotation_scope`), tracks, media)
       : null;
     const artifacts = {
       video_sha256: sourceSha256,
@@ -200,15 +207,33 @@ async function readDataset(declaration) {
 }
 
 const sourceRevision = revision();
-await rm(TRACKING, { recursive: true, force: true });
-await mkdir(TRACKING, { recursive: true });
-const datasets = await Promise.all((await roots()).map(readDataset));
-datasets.sort((left, right) => left.collection.localeCompare(right.collection) || left.id.localeCompare(right.id));
-if (revision() !== sourceRevision) throw new Error("dataset repository changed while syncing");
-const catalog = {
-  schemaVersion: "cvbench.dataset-catalog/v1",
-  repository: { name: "cvbench-dataset", url: REPOSITORY_URL, revision: sourceRevision },
-  datasets,
-};
-await writeFile(OUTPUT, `${JSON.stringify(catalog, null, 2)}\n`);
-process.stdout.write(`Synced ${datasets.length} datasets and ${datasets.flatMap((dataset) => dataset.clips).length} clips from ${catalog.repository.revision}.\n`);
+const stagingRoot = await mkdtemp(path.join(CONTROL_PLANE, ".dataset-catalog-"));
+const trackingStaging = path.join(stagingRoot, "tracking");
+const catalogStaging = path.join(stagingRoot, "catalog.json");
+await mkdir(trackingStaging);
+
+try {
+  const datasets = await settleAll((await roots()).map((declaration) => readDataset(declaration, trackingStaging)));
+  datasets.sort((left, right) => left.collection.localeCompare(right.collection) || left.id.localeCompare(right.id));
+  if (revision() !== sourceRevision) throw new Error("dataset repository changed while syncing");
+  const catalog = {
+    schemaVersion: "cvbench.dataset-catalog/v1",
+    repository: { name: "cvbench-dataset", url: REPOSITORY_URL, revision: sourceRevision },
+    datasets,
+  };
+  await writeFile(catalogStaging, `${JSON.stringify(catalog, null, 2)}\n`);
+
+  await mkdir(TRACKING, { recursive: true });
+  const trackingFiles = await readdir(trackingStaging);
+  for (const filename of trackingFiles) {
+    await rename(path.join(trackingStaging, filename), path.join(TRACKING, filename));
+  }
+  await rename(catalogStaging, OUTPUT);
+  const currentTracking = new Set(trackingFiles);
+  for (const filename of await readdir(TRACKING)) {
+    if (!currentTracking.has(filename)) await rm(path.join(TRACKING, filename));
+  }
+  process.stdout.write(`Synced ${datasets.length} datasets and ${datasets.flatMap((dataset) => dataset.clips).length} clips from ${catalog.repository.revision}.\n`);
+} finally {
+  await rm(stagingRoot, { recursive: true, force: true });
+}
