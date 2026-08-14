@@ -40,7 +40,12 @@
           },
           "annotationRows": 32,
           "humanApprovals": 0,
-          "model": "Megvii YOLOX-X COCO 640 ONNX"
+          "model": "Megvii YOLOX-X COCO 640 ONNX",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/pexels-18187166-dune.05bc3794c11d.mp4",
+            "sha256": "9465c06933302af3a8dab6b4266fccc61880bff0870273018af5d21660d282e7",
+            "bytes": 236082
+          }
         },
         {
           "id": "pixabay-112059-dog-road",
@@ -63,7 +68,12 @@
           },
           "annotationRows": 103,
           "humanApprovals": 0,
-          "model": "Megvii YOLOX-X COCO 640 ONNX"
+          "model": "Megvii YOLOX-X COCO 640 ONNX",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/pixabay-112059-dog-road.b9fdd57c97d6.mp4",
+            "sha256": "863b942a5735af180465564be91c7441f3643e0bdea477ee2033b04872f93f5f",
+            "bytes": 374847
+          }
         },
         {
           "id": "pixabay-145851-forest-bench",
@@ -86,7 +96,12 @@
           },
           "annotationRows": 61,
           "humanApprovals": 0,
-          "model": "Megvii YOLOX-X COCO 640 ONNX"
+          "model": "Megvii YOLOX-X COCO 640 ONNX",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/pixabay-145851-forest-bench.b22382b1e94c.mp4",
+            "sha256": "99c06564156e4b94873ef37c4adac239637bb8f74e9cc01fd2335f2ce5ad0124",
+            "bytes": 603169
+          }
         },
         {
           "id": "pixabay-212474-forest-walk",
@@ -109,7 +124,12 @@
           },
           "annotationRows": 52,
           "humanApprovals": 0,
-          "model": "Megvii YOLOX-X COCO 640 ONNX"
+          "model": "Megvii YOLOX-X COCO 640 ONNX",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/pixabay-212474-forest-walk.1f0b743c9b2a.mp4",
+            "sha256": "5cb9ec9618ef1f2b7e30d4a7d89887f385dfcfd03452902379a31e9c141ece39",
+            "bytes": 1193168
+          }
         },
         {
           "id": "pixabay-28855-ravine",
@@ -132,7 +152,12 @@
           },
           "annotationRows": 256,
           "humanApprovals": 0,
-          "model": "Megvii YOLOX-X COCO 640 ONNX"
+          "model": "Megvii YOLOX-X COCO 640 ONNX",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/pixabay-28855-ravine.825d9707b99a.mp4",
+            "sha256": "04dbf8f38f3b9de6dd65391ef531e529251ca559b31a5d162ff36dc70539a031",
+            "bytes": 1536697
+          }
         }
       ]
     },
@@ -170,7 +195,8 @@
           },
           "annotationRows": 2,
           "humanApprovals": 2,
-          "model": null
+          "model": null,
+          "preview": null
         }
       ]
     }

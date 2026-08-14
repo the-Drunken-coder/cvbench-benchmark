@@ -28,10 +28,27 @@ function textCell(value) {
   return cell;
 }
 
-if (page === "datasets") loadDatasets().catch((error) => {
-  setText("dataset-status", error instanceof Error ? error.message : "Dataset catalog could not be loaded.");
-  byId("dataset-status").classList.add("error");
-});
+function resetVideo(video) {
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+}
+
+if (page === "datasets") {
+  const video = byId("clip-video");
+  video.addEventListener("loadedmetadata", () => {
+    if (!video.getAttribute("src")) return;
+    const duration = Number.isFinite(video.duration) ? `${Math.round(video.duration)} seconds` : "Ready";
+    setText("clip-media-status", `Browser preview · ${duration}`);
+  });
+  video.addEventListener("error", () => {
+    if (video.getAttribute("src")) setText("clip-media-status", "Preview unavailable. Open the original source below.");
+  });
+  loadDatasets().catch((error) => {
+    setText("dataset-status", error instanceof Error ? error.message : "Dataset catalog could not be loaded.");
+    byId("dataset-status").classList.add("error");
+  });
+}
 
 async function loadDatasets() {
   const response = await fetch("/dataset-catalog/v1/catalog.json");
@@ -81,7 +98,10 @@ async function loadDatasets() {
 function renderDataset(repositoryBase, dataset, selectedClip, selectClip) {
   const detail = byId("dataset-detail");
   detail.hidden = !dataset;
-  if (!dataset) return;
+  if (!dataset) {
+    resetVideo(byId("clip-video"));
+    return;
+  }
   const annotations = dataset.clips.reduce((total, clip) => total + clip.annotationRows, 0);
   const approvals = dataset.clips.reduce((total, clip) => total + clip.humanApprovals, 0);
   setText("dataset-path", `${dataset.id} / ${dataset.version}`);
@@ -112,6 +132,20 @@ function renderClip(repositoryBase, dataset, clip) {
   setText("clip-fps", String(Number((clip.media.fpsNumerator / clip.media.fpsDenominator).toFixed(3))));
   setText("clip-model", clip.model ?? "None");
   setText("clip-sha", `${clip.sourceSha256.slice(0, 10)}…${clip.sourceSha256.slice(-6)}`);
+  const video = byId("clip-video");
+  if (clip.preview) {
+    video.hidden = false;
+    if (video.getAttribute("src") !== clip.preview.url) {
+      video.pause();
+      video.src = clip.preview.url;
+      setText("clip-media-status", "Loading browser preview.");
+      video.load();
+    }
+  } else {
+    resetVideo(video);
+    video.hidden = true;
+    setText("clip-media-status", "No browser preview is published for this clip.");
+  }
   const license = byId("clip-license");
   license.href = clip.license.url;
   license.textContent = clip.license.spdx;

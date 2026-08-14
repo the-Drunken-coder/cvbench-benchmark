@@ -375,7 +375,17 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   assert.equal(builtDatasetCatalog.repository.name, "cvbench-dataset");
   assert.match(builtDatasetCatalog.repository.revision, /^[a-f0-9]{40}$/);
   assert.deepEqual(builtDatasetCatalog.datasets.map((dataset) => dataset.id), ["recovered-clean-videos-v1", "minimal-synthetic"]);
-  assert.equal(builtDatasetCatalog.datasets.find((dataset) => dataset.id === "recovered-clean-videos-v1").evaluationEligible, false);
+  const recoveredDataset = builtDatasetCatalog.datasets.find((dataset) => dataset.id === "recovered-clean-videos-v1");
+  assert.equal(recoveredDataset.evaluationEligible, false);
+  for (const clip of recoveredDataset.clips) {
+    assert.equal(clip.preview.url, `/dataset-catalog/v1/previews/${clip.id}.${clip.sourceSha256.slice(0, 12)}.mp4`);
+    const preview = await readFile(path.join(CONTROL_PLANE, "dist", clip.preview.url));
+    assert.equal(preview.length, clip.preview.bytes);
+    assert.equal(sha256(preview), clip.preview.sha256);
+    assert.ok(preview.length < 5 * 1024 * 1024);
+  }
+  const syntheticClip = builtDatasetCatalog.datasets.find((dataset) => dataset.id === "minimal-synthetic").clips[0];
+  assert.equal(syntheticClip.preview, null);
   for (const route of ["datasets", "docs", "runs", "submit"]) {
     assert.equal(await readFile(path.join(CONTROL_PLANE, `dist/${route}/index.html`), "utf8"), await readFile(path.join(CONTROL_PLANE, "dist/index.html"), "utf8"));
   }

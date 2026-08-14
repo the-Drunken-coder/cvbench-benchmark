@@ -57,10 +57,15 @@
             <div class="table-scroll">
               <table class="pane-table clip-table"><thead><tr><th>Clip</th><th>Frames</th><th>Annotations</th><th>Review</th></tr></thead><tbody id="clip-rows"></tbody></table>
             </div>
-            <section id="clip-detail" class="clip-detail">
-              <p class="kicker">Selected clip</p>
-              <h3 id="clip-title"></h3>
-              <p id="clip-source-title"></p>
+            <section id="clip-detail" class="clip-detail" hidden>
+              <header class="clip-detail-heading">
+                <h3 id="clip-title"></h3>
+                <p id="clip-source-title"></p>
+              </header>
+              <div class="clip-player">
+                <video id="clip-video" controls playsinline preload="metadata" aria-describedby="clip-media-status"></video>
+                <p id="clip-media-status" class="clip-media-status" role="status"></p>
+              </div>
               <dl class="clip-facts">
                 <div><dt>Frames</dt><dd id="clip-frames"></dd></div><div><dt>Resolution</dt><dd id="clip-resolution"></dd></div>
                 <div><dt>Native FPS</dt><dd id="clip-fps"></dd></div><div><dt>Model</dt><dd id="clip-model"></dd></div>

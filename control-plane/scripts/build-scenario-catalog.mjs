@@ -14,6 +14,13 @@ const ROOT = path.resolve(CONTROL_PLANE, "..");
 const PUBLIC = path.join(CONTROL_PLANE, "public");
 const CATALOG_SOURCE = path.join(ROOT, "scenario-catalog");
 const DEFAULT_OUTPUT = path.join(CONTROL_PLANE, "dist");
+const DATASET_PREVIEW_FILES = [
+  "dataset-catalog/v1/previews/pexels-18187166-dune.05bc3794c11d.mp4",
+  "dataset-catalog/v1/previews/pixabay-112059-dog-road.b9fdd57c97d6.mp4",
+  "dataset-catalog/v1/previews/pixabay-145851-forest-bench.b22382b1e94c.mp4",
+  "dataset-catalog/v1/previews/pixabay-212474-forest-walk.1f0b743c9b2a.mp4",
+  "dataset-catalog/v1/previews/pixabay-28855-ravine.825d9707b99a.mp4",
+];
 const STATIC_FILES = [
   "_headers",
   "app.js",
@@ -28,6 +35,7 @@ const STATIC_FILES = [
   "scenario-loader.js",
   "scenarios/index.html",
   "styles.css",
+  ...DATASET_PREVIEW_FILES,
 ];
 const APP_ROUTE_DIRECTORIES = ["datasets", "docs", "runs", "submit"];
 const BENCHMARK_FILES = [
@@ -36,7 +44,7 @@ const BENCHMARK_FILES = [
   "benchmarks/public-whole-system-v3.yaml",
   "benchmarks/real-video-v2.yaml",
 ];
-const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".html", ".jpg", ".js", ".json"]);
+const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".html", ".jpg", ".js", ".json", ".mp4"]);
 const PRIVATE_PATH_PATTERN = /(?:^|\/)(?:\.dev\.vars|\.env(?:\.|$)|.*(?:credential|secret|contact|note|failure[-_]?packet|raw[-_]?report|d1[-_]?export|private[-_]?log).*)(?:\/|$)/i;
 const PRIVATE_FIELD_PATTERN = /(?:api[-_]?key|token|secret|credential|password|private|local[-_]?path|absolute[-_]?path|contact|notes?|failure[-_]?packet|raw[-_]?report|d1[-_]?(?:export|internal|database|binding)|operator|lease)/i;
 const PRIVATE_CONTENT_PATTERNS = [
@@ -844,7 +852,7 @@ async function outputEvidence(output) {
         if (PRIVATE_PATH_PATTERN.test(relative)) fail(`private artifact path in output: ${relative}`);
         const body = await readFile(file);
         if (body.length > MAX_ASSET_BYTES) fail(`published file exceeds 25 MiB: ${relative}`);
-        if (path.extname(relative) !== ".jpg") {
+        if (![".jpg", ".mp4"].includes(extension)) {
           const text = body.toString("utf8");
           for (const pattern of PRIVATE_CONTENT_PATTERNS) {
             if (pattern.test(text)) fail(`private artifact content in output: ${relative}`);

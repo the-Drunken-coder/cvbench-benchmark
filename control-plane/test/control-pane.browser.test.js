@@ -14,6 +14,7 @@ const TYPES = new Map([
   [".html", "text/html; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
   [".json", "application/json; charset=utf-8"],
+  [".mp4", "video/mp4"],
 ]);
 
 async function chromeExecutable() {
@@ -78,12 +79,23 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
 
     await page.getByRole("button", { name: "Minimal synthetic certification fixture" }).click();
     await page.getByRole("heading", { name: "Minimal synthetic certification fixture" }).waitFor();
+    assert.equal(await page.locator("#clip-video").isHidden(), true);
+    await page.getByText("No browser preview is published for this clip.").waitFor();
     await page.getByLabel("Search").fill("ravine");
     assert.equal(await page.locator(".dataset-table tbody tr").count(), 1);
     await page.getByRole("button", { name: "Ravine" }).click();
     await page.getByRole("heading", { name: "Ravine", exact: true }).waitFor();
     assert.match(await page.locator(".clip-detail").textContent(), /1,467/);
     assert.match(await page.locator(".clip-detail").textContent(), /YOLOX-X/);
+    const clipVideo = page.locator("#clip-video");
+    await page.getByText("Browser preview · 49 seconds").waitFor();
+    assert.match(await clipVideo.getAttribute("src"), /pixabay-28855-ravine\.825d9707b99a\.mp4$/);
+    assert.ok(await clipVideo.evaluate((video) => video.readyState >= HTMLMediaElement.HAVE_METADATA));
+    assert.ok(await clipVideo.evaluate((video) => video.duration > 48 && video.duration < 50));
+    await page.getByLabel("Search").fill("no matching dataset");
+    assert.equal(await page.locator(".dataset-table tbody tr").count(), 0);
+    assert.equal(await page.locator("#dataset-detail").isHidden(), true);
+    assert.equal(await clipVideo.getAttribute("src"), null);
 
     await page.getByRole("link", { name: "Submit", exact: true }).click();
     await page.waitForURL(`${origin}/submit/`);

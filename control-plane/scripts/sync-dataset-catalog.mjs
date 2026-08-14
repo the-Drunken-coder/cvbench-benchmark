@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -10,6 +11,7 @@ import { parse as parseYaml } from "yaml";
 
 const CONTROL_PLANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = path.join(CONTROL_PLANE, "public/dataset-catalog/v1/catalog.json");
+const PREVIEWS = path.join(CONTROL_PLANE, "public/dataset-catalog/v1/previews");
 const REPOSITORY_URL = "https://github.com/the-Drunken-coder/cvbench-dataset";
 const repository = process.argv[2] && path.resolve(process.cwd(), process.argv[2]);
 
@@ -33,6 +35,21 @@ async function json(file) {
 
 async function jsonLines(file) {
   return (await readFile(file, "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
+
+async function preview(id, sourceSha256) {
+  const filename = `${id}.${sourceSha256.slice(0, 12)}.mp4`;
+  try {
+    const body = await readFile(path.join(PREVIEWS, filename));
+    return {
+      url: `/dataset-catalog/v1/previews/${filename}`,
+      sha256: createHash("sha256").update(body).digest("hex"),
+      bytes: body.length,
+    };
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 async function roots() {
@@ -59,13 +76,14 @@ async function readDataset(declaration) {
     const source = await json(path.join(clipRoot, "source.json"));
     const reviews = await jsonLines(path.join(clipRoot, "review.jsonl"));
     const model = source.model_runs?.[0]?.model_name ?? null;
+    const sourceSha256 = required(source.source?.sha256, `${id}.source.sha256`);
     return {
       id,
       title: title(id),
       path: clipPath,
       sourceTitle: required(source.source?.title, `${id}.source.title`),
       sourceUri: required(source.source?.uri, `${id}.source.uri`),
-      sourceSha256: required(source.source?.sha256, `${id}.source.sha256`),
+      sourceSha256,
       license: {
         name: required(source.source?.license?.name, `${id}.license.name`),
         spdx: required(source.source?.license?.spdx, `${id}.license.spdx`),
@@ -81,6 +99,7 @@ async function readDataset(declaration) {
       annotationRows: (await jsonLines(path.join(clipRoot, "tracks.jsonl"))).length,
       humanApprovals: reviews.filter((review) => review.decision === "approve" && review.reviewer?.kind === "human" && review.reviewer?.independent === true).length,
       model,
+      preview: await preview(id, sourceSha256),
     };
   }));
   return {

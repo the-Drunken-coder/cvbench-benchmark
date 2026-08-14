@@ -75,6 +75,11 @@ try {
   const datasetCatalog = await datasetCatalogResponse.json();
   assert(datasetCatalog.repository.name === "cvbench-dataset", "dataset catalog must name its source repository");
   assert(/^[a-f0-9]{40}$/.test(datasetCatalog.repository.revision), "dataset catalog must pin a full source revision");
+  const clipPreview = datasetCatalog.datasets.find((dataset) => dataset.id === "recovered-clean-videos-v1").clips[0].preview;
+  const clipPreviewResponse = await request(clipPreview.url);
+  assert(clipPreviewResponse.status === 200, "dataset clip preview route must return 200");
+  assert(clipPreviewResponse.headers.get("content-type") === "video/mp4", "dataset clip preview route must return video/mp4");
+  assert(clipPreviewResponse.headers.get("cache-control")?.includes("immutable"), "dataset clip preview route must be immutable");
 
   const missingJson = await request("/scenario-catalog/v1/scenarios/not-present.json");
   assert(missingJson.status === 404, "unknown scenario JSON must return 404");

@@ -27,3 +27,6 @@
 
 /dataset-catalog/v1/catalog.json
   Cache-Control: public, max-age=0, must-revalidate
+
+/dataset-catalog/v1/previews/*
+  Cache-Control: public, max-age=31556952, immutable

@@ -48,9 +48,15 @@ npm run sync:datasets -- /path/to/cvbench-dataset
 ```
 
 The sync selects only public package, clip, source, license, media, model, and
-review-count metadata into `/dataset-catalog/v1/catalog.json`. Source media,
-annotations, reviewer identities, local paths, and mutable Studio authoring
-state are not copied into the hosted catalog.
+review-count metadata into `/dataset-catalog/v1/catalog.json`. Small browser
+previews are bound to the exact source hash and published for dataset
+inspection. Original media, annotations, reviewer identities, local paths, and
+mutable Studio authoring state are not copied into the hosted catalog.
+
+Preview files use silent H.264 at 854 pixels wide, 30 FPS, CRF 30, `yuv420p`,
+and fast-start metadata. Their filenames include the first 12 characters of the
+pinned source SHA-256; the sync command records each preview's full hash and
+byte count.
 
 ## Security properties
 
