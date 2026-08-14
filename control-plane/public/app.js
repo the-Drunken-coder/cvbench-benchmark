@@ -10,8 +10,6 @@ const byId = (id) => document.getElementById(id);
 const setText = (id, value) => { byId(id).textContent = value; };
 const titleCase = (value) => value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
 const SVG_NS = "http://www.w3.org/2000/svg";
-// The current proposals are sampled at 5 FPS. Do not carry a box into an empty sample.
-const TRACKING_WINDOW_NS = 110_000_000;
 let activeTrackingClip = null;
 let activeTrackingBoxes = [];
 const trackingCache = new Map();
@@ -56,7 +54,10 @@ function renderTrackingBoxes() {
       nearestTimestamp = box.timestampNs;
     }
   }
-  if (nearestDistance > TRACKING_WINDOW_NS) return;
+  const frameIntervalNs = 1_000_000_000
+    * activeTrackingClip.media.fpsDenominator
+    / activeTrackingClip.media.fpsNumerator;
+  if (nearestDistance > frameIntervalNs * 0.75) return;
 
   const { width, height } = activeTrackingClip.media;
   overlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -75,7 +76,7 @@ function renderTrackingBoxes() {
     label.setAttribute("x", x1);
     label.setAttribute("y", Math.max(labelSize, y1 - labelSize / 3));
     label.setAttribute("font-size", labelSize);
-    label.textContent = `${box.classId} ${Math.round(box.confidence * 100)}%`;
+    label.textContent = `${box.trackId} ${Math.round(box.confidence * 100)}%`;
     overlay.append(rectangle, label);
   }
 }
@@ -87,13 +88,13 @@ async function loadTrackingBoxes(clip) {
     request = fetch(clip.tracking.url).then(async (response) => {
       if (!response.ok) throw new Error(`Tracking boxes returned ${response.status}.`);
       const document = await response.json();
-      if (document.schemaVersion !== "cvbench.browser-boxes/v1" || !Array.isArray(document.boxes)) {
+      if (document.schemaVersion !== "cvbench.browser-boxes/v2" || !Array.isArray(document.boxes)) {
         throw new Error("Tracking boxes use an unsupported format.");
       }
       return document.boxes.map((row) => {
-        if (!Array.isArray(row) || row.length !== 7) throw new Error("Tracking box row is invalid.");
-        const [timestampNs, x1, y1, x2, y2, classId, confidence] = row;
-        return { timestampNs, bbox: [x1, y1, x2, y2], classId, confidence };
+        if (!Array.isArray(row) || row.length !== 8) throw new Error("Tracking box row is invalid.");
+        const [timestampNs, x1, y1, x2, y2, trackId, classId, confidence] = row;
+        return { timestampNs, bbox: [x1, y1, x2, y2], trackId, classId, confidence };
       });
     });
     trackingCache.set(clip.tracking.url, request);

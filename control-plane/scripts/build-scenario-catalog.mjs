@@ -22,11 +22,11 @@ const DATASET_PREVIEW_FILES = [
   "dataset-catalog/v1/previews/pixabay-28855-ravine.04dbf8f38f3b.mp4",
 ];
 const DATASET_TRACKING_FILES = [
-  "dataset-catalog/v1/tracking/pexels-18187166-dune.fa2b1c4d88c5.json",
-  "dataset-catalog/v1/tracking/pixabay-112059-dog-road.1a72e3b74f72.json",
-  "dataset-catalog/v1/tracking/pixabay-145851-forest-bench.3381b46de5e6.json",
-  "dataset-catalog/v1/tracking/pixabay-212474-forest-walk.1b60d5e3479f.json",
-  "dataset-catalog/v1/tracking/pixabay-28855-ravine.e8175f07761d.json",
+  "dataset-catalog/v1/tracking/pexels-18187166-dune.c033bbc3a2f0.json",
+  "dataset-catalog/v1/tracking/pixabay-112059-dog-road.205b09287c77.json",
+  "dataset-catalog/v1/tracking/pixabay-145851-forest-bench.9cbf01a2d7a5.json",
+  "dataset-catalog/v1/tracking/pixabay-212474-forest-walk.941e11242772.json",
+  "dataset-catalog/v1/tracking/pixabay-28855-ravine.b5c34f482fec.json",
 ];
 const STATIC_FILES = [
   "_headers",

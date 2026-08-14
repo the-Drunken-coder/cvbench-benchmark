@@ -64,13 +64,15 @@ function trackingBoxes(rows, clipId, media) {
     }
     const confidence = required(row.confidence, `${label}.confidence`);
     if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new Error(`${label}.confidence must be between zero and one`);
-    return [timestampNs, ...row.bbox_xyxy, required(row.class_id, `${label}.class_id`), confidence];
+    const trackId = required(row.track_id, `${label}.track_id`);
+    if (typeof trackId !== "string") throw new Error(`${label}.track_id must be a string`);
+    return [timestampNs, ...row.bbox_xyxy, trackId, required(row.class_id, `${label}.class_id`), confidence];
   });
 }
 
 async function tracking(directory, id, scope, rows, media) {
   const document = {
-    schemaVersion: "cvbench.browser-boxes/v1",
+    schemaVersion: "cvbench.browser-boxes/v2",
     scope,
     boxes: trackingBoxes(rows, id, media),
   };

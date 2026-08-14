@@ -384,13 +384,14 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
     assert.equal(trackingBody.length, clip.tracking.bytes);
     assert.equal(sha256(trackingBody), clip.tracking.sha256);
     const tracking = JSON.parse(trackingBody);
-    assert.equal(tracking.schemaVersion, "cvbench.browser-boxes/v1");
+    assert.equal(tracking.schemaVersion, "cvbench.browser-boxes/v2");
     assert.equal(tracking.scope, "sparse");
     assert.equal(tracking.boxes.length, clip.annotationRows);
     for (const box of tracking.boxes) {
-      assert.equal(box.length, 7);
-      const [timestampNs, x1, y1, x2, y2, classId, confidence] = box;
+      assert.equal(box.length, 8);
+      const [timestampNs, x1, y1, x2, y2, trackId, classId, confidence] = box;
       assert.ok(Number.isSafeInteger(timestampNs) && timestampNs >= 0);
+      assert.match(trackId, /^(?:dog|person)-\d{4}$/);
       assert.ok(["dog", "person"].includes(classId));
       assert.ok(confidence >= 0 && confidence <= 1);
       assert.ok(x1 >= 0 && y1 >= 0 && x2 <= clip.media.width && y2 <= clip.media.height && x2 > x1 && y2 > y1);

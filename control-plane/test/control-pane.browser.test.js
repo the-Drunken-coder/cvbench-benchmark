@@ -77,13 +77,13 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
 
     await page.goto(`${origin}/datasets/`);
     await page.getByRole("heading", { name: "Datasets", exact: true }).waitFor();
-    await page.getByRole("heading", { name: "Recovered clean videos training proposals" }).waitFor();
+    await page.getByRole("heading", { name: "Recovered clean videos dense segmentation tracks" }).waitFor();
     assert.equal(await page.locator(".dataset-table tbody tr").count(), 2);
-    assert.match(await page.locator(".repository-status").textContent(), /847b9c2/);
+    assert.match(await page.locator(".repository-status").textContent(), /9d512da/);
     const trackingToggle = page.getByLabel("Tracking boxes");
     await page.getByText("Browser preview · 12 seconds").waitFor();
     await page.locator(".clip-tracking-box").waitFor();
-    assert.match(await page.locator(".clip-tracking-label").textContent(), /person 89%/);
+    assert.match(await page.locator(".clip-tracking-label").textContent(), /person-0001 91%/);
     await trackingToggle.click();
     assert.equal(await page.locator(".clip-tracking-box").count(), 0);
     await trackingToggle.click();
@@ -112,7 +112,7 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
     await page.getByRole("button", { name: "Ravine" }).click();
     await page.getByRole("heading", { name: "Ravine", exact: true }).waitFor();
     assert.match(await page.locator(".clip-detail").textContent(), /1,467/);
-    assert.match(await page.locator(".clip-detail").textContent(), /YOLOX-X/);
+    assert.match(await page.locator(".clip-detail").textContent(), /YOLO26x-seg/);
     const clipVideo = page.locator("#clip-video");
     await page.getByText("Browser preview · 49 seconds").waitFor();
     assert.match(await clipVideo.getAttribute("src"), /pixabay-28855-ravine\.04dbf8f38f3b\.mp4$/);
