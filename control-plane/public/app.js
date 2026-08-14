@@ -9,6 +9,12 @@ if (legacySubmission) window.location.replace(`/results/?submission=${encodeURIC
 const byId = (id) => document.getElementById(id);
 const setText = (id, value) => { byId(id).textContent = value; };
 const titleCase = (value) => value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+const SVG_NS = "http://www.w3.org/2000/svg";
+// The current proposals are sampled at 5 FPS. Do not carry a box into an empty sample.
+const TRACKING_WINDOW_NS = 110_000_000;
+let activeTrackingClip = null;
+let activeTrackingBoxes = [];
+const trackingCache = new Map();
 
 function identityCell(title, id, select) {
   const cell = document.createElement("td");
@@ -34,16 +40,116 @@ function resetVideo(video) {
   video.load();
 }
 
+function renderTrackingBoxes() {
+  const overlay = byId("clip-tracking-overlay");
+  const video = byId("clip-video");
+  overlay.replaceChildren();
+  if (!activeTrackingBoxes.length || !byId("clip-box-toggle").checked || video.hidden) return;
+
+  const now = video.currentTime * 1_000_000_000;
+  let nearestTimestamp = null;
+  let nearestDistance = Infinity;
+  for (const box of activeTrackingBoxes) {
+    const distance = Math.abs(box.timestampNs - now);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestTimestamp = box.timestampNs;
+    }
+  }
+  if (nearestDistance > TRACKING_WINDOW_NS) return;
+
+  const { width, height } = activeTrackingClip.media;
+  overlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const labelSize = Math.max(18, height / 40);
+  for (const box of activeTrackingBoxes) {
+    if (box.timestampNs !== nearestTimestamp) continue;
+    const [x1, y1, x2, y2] = box.bbox;
+    const rectangle = document.createElementNS(SVG_NS, "rect");
+    rectangle.setAttribute("class", "clip-tracking-box");
+    rectangle.setAttribute("x", x1);
+    rectangle.setAttribute("y", y1);
+    rectangle.setAttribute("width", x2 - x1);
+    rectangle.setAttribute("height", y2 - y1);
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("class", "clip-tracking-label");
+    label.setAttribute("x", x1);
+    label.setAttribute("y", Math.max(labelSize, y1 - labelSize / 3));
+    label.setAttribute("font-size", labelSize);
+    label.textContent = `${box.classId} ${Math.round(box.confidence * 100)}%`;
+    overlay.append(rectangle, label);
+  }
+}
+
+async function loadTrackingBoxes(clip) {
+  if (!clip.tracking) return [];
+  let request = trackingCache.get(clip.tracking.url);
+  if (!request) {
+    request = fetch(clip.tracking.url).then(async (response) => {
+      if (!response.ok) throw new Error(`Tracking boxes returned ${response.status}.`);
+      const document = await response.json();
+      if (document.schemaVersion !== "cvbench.browser-boxes/v1" || !Array.isArray(document.boxes)) {
+        throw new Error("Tracking boxes use an unsupported format.");
+      }
+      return document.boxes.map((row) => {
+        if (!Array.isArray(row) || row.length !== 7) throw new Error("Tracking box row is invalid.");
+        const [timestampNs, x1, y1, x2, y2, classId, confidence] = row;
+        return { timestampNs, bbox: [x1, y1, x2, y2], classId, confidence };
+      });
+    });
+    trackingCache.set(clip.tracking.url, request);
+    request.catch(() => trackingCache.delete(clip.tracking.url));
+  }
+  return request;
+}
+
+function selectTrackingClip(clip) {
+  activeTrackingClip = clip;
+  activeTrackingBoxes = [];
+  byId("clip-box-toggle-label").hidden = true;
+  renderTrackingBoxes();
+  if (!clip.preview || !clip.tracking) return;
+  loadTrackingBoxes(clip).then((boxes) => {
+    if (activeTrackingClip !== clip) return;
+    activeTrackingBoxes = boxes;
+    byId("clip-box-toggle-label").hidden = boxes.length === 0;
+    renderTrackingBoxes();
+  }).catch(() => {
+    if (activeTrackingClip === clip) byId("clip-box-toggle-label").hidden = true;
+  });
+}
+
 if (page === "datasets") {
   const video = byId("clip-video");
+  const toggle = byId("clip-box-toggle");
+  let playbackGeneration = 0;
   video.addEventListener("loadedmetadata", () => {
     if (!video.getAttribute("src")) return;
     const duration = Number.isFinite(video.duration) ? `${Math.round(video.duration)} seconds` : "Ready";
     setText("clip-media-status", `Browser preview · ${duration}`);
+    renderTrackingBoxes();
   });
+  video.addEventListener("timeupdate", renderTrackingBoxes);
+  video.addEventListener("seeked", renderTrackingBoxes);
+  video.addEventListener("play", () => {
+    if (!("requestVideoFrameCallback" in video)) return;
+    const generation = ++playbackGeneration;
+    const renderFrame = () => {
+      if (generation !== playbackGeneration) return;
+      renderTrackingBoxes();
+      if (!video.paused && !video.ended) video.requestVideoFrameCallback(renderFrame);
+    };
+    video.requestVideoFrameCallback(renderFrame);
+  });
+  video.addEventListener("pause", () => { playbackGeneration += 1; });
+  video.addEventListener("ended", () => { playbackGeneration += 1; });
   video.addEventListener("error", () => {
-    if (video.getAttribute("src")) setText("clip-media-status", "Preview unavailable. Open the original source below.");
+    if (!video.getAttribute("src")) return;
+    setText("clip-media-status", "Preview unavailable. Open the original source below.");
+    activeTrackingBoxes = [];
+    byId("clip-box-toggle-label").hidden = true;
+    renderTrackingBoxes();
   });
+  toggle.addEventListener("change", renderTrackingBoxes);
   loadDatasets().catch((error) => {
     setText("dataset-status", error instanceof Error ? error.message : "Dataset catalog could not be loaded.");
     byId("dataset-status").classList.add("error");
@@ -99,7 +205,12 @@ function renderDataset(repositoryBase, dataset, selectedClip, selectClip) {
   const detail = byId("dataset-detail");
   detail.hidden = !dataset;
   if (!dataset) {
+    activeTrackingClip = null;
+    activeTrackingBoxes = [];
     resetVideo(byId("clip-video"));
+    byId("clip-video-stage").hidden = true;
+    byId("clip-box-toggle-label").hidden = true;
+    renderTrackingBoxes();
     return;
   }
   const annotations = dataset.clips.reduce((total, clip) => total + clip.annotationRows, 0);
@@ -125,6 +236,7 @@ function renderDataset(repositoryBase, dataset, selectedClip, selectClip) {
 function renderClip(repositoryBase, dataset, clip) {
   byId("clip-detail").hidden = !clip;
   if (!clip) return;
+  selectTrackingClip(clip);
   setText("clip-title", clip.title);
   setText("clip-source-title", clip.sourceTitle);
   setText("clip-frames", clip.media.frameCount.toLocaleString());
@@ -135,6 +247,7 @@ function renderClip(repositoryBase, dataset, clip) {
   const video = byId("clip-video");
   if (clip.preview) {
     video.hidden = false;
+    byId("clip-video-stage").hidden = false;
     if (video.getAttribute("src") !== clip.preview.url) {
       video.pause();
       video.src = clip.preview.url;
@@ -144,8 +257,10 @@ function renderClip(repositoryBase, dataset, clip) {
   } else {
     resetVideo(video);
     video.hidden = true;
+    byId("clip-video-stage").hidden = true;
     setText("clip-media-status", "No browser preview is published for this clip.");
   }
+  renderTrackingBoxes();
   const license = byId("clip-license");
   license.href = clip.license.url;
   license.textContent = clip.license.spdx;

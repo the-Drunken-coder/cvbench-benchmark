@@ -80,10 +80,29 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
     await page.getByRole("heading", { name: "Recovered clean videos training proposals" }).waitFor();
     assert.equal(await page.locator(".dataset-table tbody tr").count(), 2);
     assert.match(await page.locator(".repository-status").textContent(), /847b9c2/);
+    const trackingToggle = page.getByLabel("Tracking boxes");
+    await page.getByText("Browser preview · 12 seconds").waitFor();
+    await page.locator(".clip-tracking-box").waitFor();
+    assert.match(await page.locator(".clip-tracking-label").textContent(), /person 89%/);
+    await trackingToggle.click();
+    assert.equal(await page.locator(".clip-tracking-box").count(), 0);
+    await trackingToggle.click();
+    await page.locator(".clip-tracking-box").waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
+    const mobileBar = await page.locator(".clip-media-bar").evaluate((bar) => {
+      const toggle = bar.querySelector(".clip-box-toggle").getBoundingClientRect();
+      const bounds = bar.getBoundingClientRect();
+      return toggle.left >= bounds.left && toggle.right <= bounds.right;
+    });
+    assert.equal(mobileBar, true);
+    await page.setViewportSize({ width: 1440, height: 1000 });
 
     await page.getByRole("button", { name: "Minimal synthetic certification fixture" }).click();
     await page.getByRole("heading", { name: "Minimal synthetic certification fixture" }).waitFor();
     assert.equal(await page.locator("#clip-video").isHidden(), true);
+    assert.equal(await page.getByLabel("Tracking boxes").isHidden(), true);
+    assert.equal(await page.locator(".clip-tracking-box").count(), 0);
     await page.getByText("No browser preview is published for this clip.").waitFor();
     await page.getByLabel("Search").fill("ravine");
     assert.equal(await page.locator(".dataset-table tbody tr").count(), 1);
@@ -96,10 +115,12 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
     assert.match(await clipVideo.getAttribute("src"), /pixabay-28855-ravine\.04dbf8f38f3b\.mp4$/);
     await page.waitForFunction(() => document.querySelector("#clip-video")?.readyState >= HTMLMediaElement.HAVE_METADATA);
     assert.ok(await clipVideo.evaluate((video) => video.duration > 48 && video.duration < 50));
+    assert.equal(await trackingToggle.isChecked(), true);
     await page.getByLabel("Search").fill("no matching dataset");
     assert.equal(await page.locator(".dataset-table tbody tr").count(), 0);
     assert.equal(await page.locator("#dataset-detail").isHidden(), true);
     assert.equal(await clipVideo.getAttribute("src"), null);
+    assert.equal(await page.locator(".clip-tracking-box").count(), 0);
 
     await page.getByRole("link", { name: "Submit", exact: true }).click();
     await page.waitForURL(`${origin}/submit/`);

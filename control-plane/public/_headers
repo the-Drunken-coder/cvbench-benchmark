@@ -30,3 +30,6 @@
 
 /dataset-catalog/v1/previews/*
   Cache-Control: public, max-age=31556952, immutable
+
+/dataset-catalog/v1/tracking/*
+  Cache-Control: public, max-age=31556952, immutable

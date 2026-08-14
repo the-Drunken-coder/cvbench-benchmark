@@ -63,8 +63,14 @@
                 <p id="clip-source-title"></p>
               </header>
               <div class="clip-player">
-                <video id="clip-video" controls playsinline preload="metadata" aria-describedby="clip-media-status"></video>
-                <p id="clip-media-status" class="clip-media-status" role="status"></p>
+                <div id="clip-video-stage" class="clip-video-stage">
+                  <video id="clip-video" controls playsinline preload="metadata" aria-describedby="clip-media-status"></video>
+                  <svg id="clip-tracking-overlay" aria-hidden="true"></svg>
+                </div>
+                <div class="clip-media-bar">
+                  <p id="clip-media-status" class="clip-media-status" role="status"></p>
+                  <label id="clip-box-toggle-label" class="clip-box-toggle"><input id="clip-box-toggle" type="checkbox" role="switch" checked>Tracking boxes</label>
+                </div>
               </div>
               <dl class="clip-facts">
                 <div><dt>Frames</dt><dd id="clip-frames"></dd></div><div><dt>Resolution</dt><dd id="clip-resolution"></dd></div>

@@ -379,6 +379,22 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   assert.equal(recoveredDataset.evaluationEligible, false);
   for (const clip of recoveredDataset.clips) {
     assert.equal(clip.preview.url, `/dataset-catalog/v1/previews/${clip.id}.${clip.preview.sha256.slice(0, 12)}.mp4`);
+    assert.equal(clip.tracking.url, `/dataset-catalog/v1/tracking/${clip.id}.${clip.tracking.sha256.slice(0, 12)}.json`);
+    const trackingBody = await readFile(path.join(CONTROL_PLANE, "dist", clip.tracking.url));
+    assert.equal(trackingBody.length, clip.tracking.bytes);
+    assert.equal(sha256(trackingBody), clip.tracking.sha256);
+    const tracking = JSON.parse(trackingBody);
+    assert.equal(tracking.schemaVersion, "cvbench.browser-boxes/v1");
+    assert.equal(tracking.scope, "sparse");
+    assert.equal(tracking.boxes.length, clip.annotationRows);
+    for (const box of tracking.boxes) {
+      assert.equal(box.length, 7);
+      const [timestampNs, x1, y1, x2, y2, classId, confidence] = box;
+      assert.ok(Number.isSafeInteger(timestampNs) && timestampNs >= 0);
+      assert.ok(["dog", "person"].includes(classId));
+      assert.ok(confidence >= 0 && confidence <= 1);
+      assert.ok(x1 >= 0 && y1 >= 0 && x2 <= clip.media.width && y2 <= clip.media.height && x2 > x1 && y2 > y1);
+    }
     const preview = await readFile(path.join(CONTROL_PLANE, "dist", clip.preview.url));
     assert.equal(preview.length, clip.preview.bytes);
     assert.equal(sha256(preview), clip.preview.sha256);
@@ -386,6 +402,8 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   }
   const syntheticClip = builtDatasetCatalog.datasets.find((dataset) => dataset.id === "minimal-synthetic").clips[0];
   assert.equal(syntheticClip.preview, null);
+  assert.equal(syntheticClip.tracking, null);
+  assert.match(await readFile(path.join(CONTROL_PLANE, "dist/_headers"), "utf8"), /dataset-catalog\/v1\/tracking\/\*[\s\S]*immutable/);
   for (const route of ["datasets", "docs", "runs", "submit"]) {
     assert.equal(await readFile(path.join(CONTROL_PLANE, `dist/${route}/index.html`), "utf8"), await readFile(path.join(CONTROL_PLANE, "dist/index.html"), "utf8"));
   }

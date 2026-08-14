@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,7 @@ import { parse as parseYaml } from "yaml";
 const CONTROL_PLANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = path.join(CONTROL_PLANE, "public/dataset-catalog/v1/catalog.json");
 const PREVIEWS = path.join(CONTROL_PLANE, "public/dataset-catalog/v1/previews");
+const TRACKING = path.join(CONTROL_PLANE, "public/dataset-catalog/v1/tracking");
 const REPOSITORY_URL = "https://github.com/the-Drunken-coder/cvbench-dataset";
 const repository = process.argv[2] && path.resolve(process.cwd(), process.argv[2]);
 
@@ -35,6 +36,46 @@ function revision() {
 
 async function jsonLines(file) {
   return (await readFile(file, "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
+
+function trackingBoxes(rows, clipId, media) {
+  let previousTimestamp = -1;
+  return rows.map((row, index) => {
+    const label = `${clipId}.tracks[${index}]`;
+    const timestampNs = required(row.source_timestamp_ns, `${label}.source_timestamp_ns`);
+    if (!Number.isSafeInteger(timestampNs) || timestampNs < previousTimestamp) {
+      throw new Error(`${label}.source_timestamp_ns must be a sorted non-negative integer`);
+    }
+    previousTimestamp = timestampNs;
+    if (row.clip_id !== clipId) throw new Error(`${label}.clip_id does not match`);
+    if (!Array.isArray(row.bbox_xyxy) || row.bbox_xyxy.length !== 4 || row.bbox_xyxy.some((value) => !Number.isFinite(value))) {
+      throw new Error(`${label}.bbox_xyxy must contain four finite coordinates`);
+    }
+    const [x1, y1, x2, y2] = row.bbox_xyxy;
+    if (x1 < 0 || y1 < 0 || x2 > media.width || y2 > media.height || x2 <= x1 || y2 <= y1) {
+      throw new Error(`${label}.bbox_xyxy is outside the source frame`);
+    }
+    const confidence = required(row.confidence, `${label}.confidence`);
+    if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new Error(`${label}.confidence must be between zero and one`);
+    return [timestampNs, ...row.bbox_xyxy, required(row.class_id, `${label}.class_id`), confidence];
+  });
+}
+
+async function tracking(id, scope, rows, media) {
+  const document = {
+    schemaVersion: "cvbench.browser-boxes/v1",
+    scope,
+    boxes: trackingBoxes(rows, id, media),
+  };
+  const body = Buffer.from(`${JSON.stringify(document)}\n`);
+  const digest = sha256(body);
+  const filename = `${id}.${digest.slice(0, 12)}.json`;
+  await writeFile(path.join(TRACKING, filename), body);
+  return {
+    url: `/dataset-catalog/v1/tracking/${filename}`,
+    sha256: digest,
+    bytes: body.length,
+  };
 }
 
 async function preview(id) {
@@ -102,9 +143,21 @@ async function readDataset(declaration) {
     const sourceBody = await readFile(path.join(clipRoot, "source.json"));
     const tracksBody = await readFile(path.join(clipRoot, "tracks.jsonl"));
     const source = JSON.parse(sourceBody);
+    const tracks = tracksBody.toString("utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
     const reviews = await jsonLines(path.join(clipRoot, "review.jsonl"));
     const model = source.model_runs?.[0]?.model_name ?? null;
     const sourceSha256 = required(source.source?.sha256, `${id}.source.sha256`);
+    const media = {
+      frameCount: required(source.media?.frame_count, `${id}.media.frame_count`),
+      width: required(source.media?.width, `${id}.media.width`),
+      height: required(source.media?.height, `${id}.media.height`),
+      fpsNumerator: required(source.media?.fps_numerator, `${id}.media.fps_numerator`),
+      fpsDenominator: required(source.media?.fps_denominator, `${id}.media.fps_denominator`),
+    };
+    const clipPreview = await preview(id);
+    const clipTracking = clipPreview && tracks.length
+      ? await tracking(id, required(descriptor.annotation_scope, `${declaration.path}.annotation_scope`), tracks, media)
+      : null;
     const artifacts = {
       video_sha256: sourceSha256,
       tracks_sha256: sha256(tracksBody),
@@ -122,17 +175,12 @@ async function readDataset(declaration) {
         spdx: required(source.source?.license?.spdx, `${id}.license.spdx`),
         url: required(source.source?.license?.url, `${id}.license.url`),
       },
-      media: {
-        frameCount: required(source.media?.frame_count, `${id}.media.frame_count`),
-        width: required(source.media?.width, `${id}.media.width`),
-        height: required(source.media?.height, `${id}.media.height`),
-        fpsNumerator: required(source.media?.fps_numerator, `${id}.media.fps_numerator`),
-        fpsDenominator: required(source.media?.fps_denominator, `${id}.media.fps_denominator`),
-      },
-      annotationRows: tracksBody.toString("utf8").split("\n").filter(Boolean).length,
+      media,
+      annotationRows: tracks.length,
       humanApprovals: humanApprovals(reviews, id, artifacts),
       model,
-      preview: await preview(id),
+      preview: clipPreview,
+      tracking: clipTracking,
     };
   }));
   return {
@@ -152,6 +200,8 @@ async function readDataset(declaration) {
 }
 
 const sourceRevision = revision();
+await rm(TRACKING, { recursive: true, force: true });
+await mkdir(TRACKING, { recursive: true });
 const datasets = await Promise.all((await roots()).map(readDataset));
 datasets.sort((left, right) => left.collection.localeCompare(right.collection) || left.id.localeCompare(right.id));
 if (revision() !== sourceRevision) throw new Error("dataset repository changed while syncing");

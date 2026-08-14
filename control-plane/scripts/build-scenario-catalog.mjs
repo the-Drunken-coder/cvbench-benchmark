@@ -21,6 +21,13 @@ const DATASET_PREVIEW_FILES = [
   "dataset-catalog/v1/previews/pixabay-212474-forest-walk.5cb9ec9618ef.mp4",
   "dataset-catalog/v1/previews/pixabay-28855-ravine.04dbf8f38f3b.mp4",
 ];
+const DATASET_TRACKING_FILES = [
+  "dataset-catalog/v1/tracking/pexels-18187166-dune.fa2b1c4d88c5.json",
+  "dataset-catalog/v1/tracking/pixabay-112059-dog-road.1a72e3b74f72.json",
+  "dataset-catalog/v1/tracking/pixabay-145851-forest-bench.3381b46de5e6.json",
+  "dataset-catalog/v1/tracking/pixabay-212474-forest-walk.1b60d5e3479f.json",
+  "dataset-catalog/v1/tracking/pixabay-28855-ravine.e8175f07761d.json",
+];
 const STATIC_FILES = [
   "_headers",
   "app.js",
@@ -36,6 +43,7 @@ const STATIC_FILES = [
   "scenarios/index.html",
   "styles.css",
   ...DATASET_PREVIEW_FILES,
+  ...DATASET_TRACKING_FILES,
 ];
 const APP_ROUTE_DIRECTORIES = ["datasets", "docs", "runs", "submit"];
 const BENCHMARK_FILES = [
