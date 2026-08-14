@@ -27,11 +27,11 @@
           <div><h1>Datasets</h1><p>One read-only index for dataset inspection, model development, and benchmark admission.</p></div>
           <a id="dataset-revision" class="repository-status" href="https://github.com/the-Drunken-coder/cvbench-dataset">Loading dataset revision</a>
         </header>
-        <form class="pane-filters" id="dataset-filters" role="search">
+        <div class="pane-filters" id="dataset-filters" role="search">
           <label>Search<input id="dataset-search" type="search" placeholder="Dataset, clip, or source"></label>
           <label>Role<select id="dataset-role"><option value="all">All roles</option><option value="training_only">Training only</option><option value="benchmark_candidate">Benchmark candidate</option><option value="benchmark_truth">Benchmark truth</option></select></label>
           <label>State<select id="dataset-state"><option value="all">All states</option><option value="draft">Draft</option><option value="reviewed">Reviewed</option><option value="certified">Certified</option></select></label>
-        </form>
+        </div>
         <p id="dataset-status" class="catalog-status" role="status">Loading the pinned dataset catalog.</p>
         <div class="table-scroll">
           <table class="pane-table dataset-table">
