@@ -40,7 +40,7 @@ Worker asset pipeline. It has four clear destinations:
 private and is not linked from the public application shell.
 
 Refresh the checked-in dataset projection from a clean local Dataset checkout
-at the pinned `847b9c2d7b17a26606de2803c088b577e1821d00` revision with one command:
+at the pinned `74b8ddd0501586adebbf5a2be605b4483323fdee` revision with one command:
 
 ```bash
 cd control-plane
@@ -51,10 +51,10 @@ The sync selects only public package, clip, source, license, media, model, and
 review-count metadata into `/dataset-catalog/v1/catalog.json`. Small browser
 previews are bound to their exact content hash and published for dataset
 inspection. Preview clips also carry a bounded projection of sparse boxes with
-only source timestamp, rectangle, class, and confidence so the browser can
-toggle model proposals during playback. Original media, track identities,
-reviewer identities, local paths, and mutable Studio authoring state are not
-copied into the hosted catalog.
+source timestamp, rectangle, track identity, class, and confidence so the
+browser can toggle model proposals during playback. Original media, reviewer
+identities, local paths, and mutable Studio authoring state are not copied into
+the hosted catalog.
 
 Preview files use silent H.264 at 854 pixels wide, 30 FPS, CRF 30, `yuv420p`,
 and fast-start metadata. Their filenames include the first 12 characters of the

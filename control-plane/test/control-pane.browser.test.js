@@ -79,7 +79,7 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
     await page.getByRole("heading", { name: "Datasets", exact: true }).waitFor();
     await page.getByRole("heading", { name: "Recovered clean videos dense segmentation tracks" }).waitFor();
     assert.equal(await page.locator(".dataset-table tbody tr").count(), 2);
-    assert.match(await page.locator(".repository-status").textContent(), /9d512da/);
+    assert.match(await page.locator(".repository-status").textContent(), /74b8ddd/);
     const trackingToggle = page.getByLabel("Tracking boxes");
     await page.getByText("Browser preview · 12 seconds").waitFor();
     await page.locator(".clip-tracking-box").waitFor();
