@@ -104,6 +104,7 @@ async function loadTrackingBoxes(clip) {
 }
 
 function selectTrackingClip(clip) {
+  if (activeTrackingClip === clip) return;
   activeTrackingClip = clip;
   activeTrackingBoxes = [];
   byId("clip-box-toggle-label").hidden = true;

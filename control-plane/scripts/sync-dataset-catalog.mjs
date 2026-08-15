@@ -137,13 +137,13 @@ async function preview(id) {
 
     const [filename] = candidates;
     const body = await readFile(path.join(PREVIEWS, filename));
-    const sha256 = createHash("sha256").update(body).digest("hex");
-    if (filename !== `${id}.${sha256.slice(0, 12)}.mp4`) {
+    const digest = sha256(body);
+    if (filename !== `${id}.${digest.slice(0, 12)}.mp4`) {
       throw new Error(`${id} preview filename does not match its content hash`);
     }
     return {
       url: `/dataset-catalog/v1/previews/${filename}`,
-      sha256,
+      sha256: digest,
       bytes: body.length,
     };
   } catch (error) {
@@ -188,6 +188,9 @@ async function readDataset(declaration, trackingDirectory) {
   const root = path.join(repository, declaration.path);
   const descriptor = parseYaml(await readFile(path.join(root, "dataset.yaml"), "utf8"));
   const clips = await settleAll(descriptor.clips.map(async ({ id, path: clipPath }) => {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id ?? "")) {
+      throw new Error(`${declaration.path} contains an invalid clip id`);
+    }
     if (clipPath !== `clips/${id}`) throw new Error(`${declaration.path} contains an invalid clip path`);
     const clipRoot = path.join(root, clipPath);
     const sourceBody = await readFile(path.join(clipRoot, "source.json"));
