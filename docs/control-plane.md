@@ -40,7 +40,8 @@ Worker asset pipeline. It has four clear destinations:
 private and is not linked from the public application shell.
 
 Refresh the checked-in dataset projection from a clean local Dataset checkout
-at the pinned `74b8ddd0501586adebbf5a2be605b4483323fdee` revision with one command:
+that matches `control-plane/dataset-catalog-source.lock.json`. The lock binds
+the merged revision and every dataset/example input byte with SHA-256:
 
 ```bash
 cd control-plane

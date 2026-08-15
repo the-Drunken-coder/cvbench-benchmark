@@ -372,8 +372,10 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   assert.match(home, /One read-only index/);
   assert.match(submitSource, /Synced from/);
   const builtDatasetCatalog = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dist/dataset-catalog/v1/catalog.json"), "utf8"));
+  const datasetSourceLock = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json"), "utf8"));
   assert.equal(builtDatasetCatalog.repository.name, "cvbench-dataset");
-  assert.match(builtDatasetCatalog.repository.revision, /^[a-f0-9]{40}$/);
+  assert.equal(builtDatasetCatalog.repository.revision, datasetSourceLock.revision);
+  assert.match(datasetSourceLock.treeSha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(builtDatasetCatalog.datasets.map((dataset) => dataset.id), ["recovered-clean-videos-v1", "minimal-synthetic"]);
   const recoveredDataset = builtDatasetCatalog.datasets.find((dataset) => dataset.id === "recovered-clean-videos-v1");
   assert.equal(recoveredDataset.evaluationEligible, false);
