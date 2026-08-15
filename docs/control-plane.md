@@ -41,7 +41,8 @@ private and is not linked from the public application shell.
 
 Refresh the checked-in dataset projection from a clean local Dataset checkout
 that matches `control-plane/dataset-catalog-source.lock.json`. The lock binds
-the merged revision and every dataset/example input byte with SHA-256:
+the merged revision, every dataset/example input byte, and the complete
+generated catalog projection with SHA-256:
 
 ```bash
 cd control-plane

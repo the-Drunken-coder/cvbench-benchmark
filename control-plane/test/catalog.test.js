@@ -11,6 +11,7 @@ import { parse as parseYaml } from "yaml";
 
 import {
   allowedObject,
+  assertCatalogProjectionLock,
   assertSafeOutput,
   assertedRegularFile,
   buildCatalog,
@@ -55,6 +56,18 @@ function runBuild(output) {
     encoding: "utf8",
   });
 }
+
+test("dataset catalog projection is bound to the source lock", async () => {
+  const catalogBody = await readFile(path.join(CONTROL_PLANE, "public/dataset-catalog/v1/catalog.json"));
+  const sourceLock = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json")));
+  assert.doesNotThrow(() => assertCatalogProjectionLock(catalogBody, sourceLock));
+  const edited = JSON.parse(catalogBody);
+  edited.datasets[0].evaluationEligible = true;
+  assert.throws(
+    () => assertCatalogProjectionLock(Buffer.from(`${JSON.stringify(edited, null, 2)}\n`), sourceLock),
+    /dataset catalog projection does not match its source lock/,
+  );
+});
 
 test("two clean catalog builds are byte-identical and within budgets", async (context) => {
   const packageJson = JSON.parse(await readFile(path.join(CONTROL_PLANE, "package.json"), "utf8"));
@@ -375,6 +388,7 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
   const datasetSourceLock = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json"), "utf8"));
   assert.equal(builtDatasetCatalog.repository.name, "cvbench-dataset");
   assert.equal(builtDatasetCatalog.repository.revision, datasetSourceLock.revision);
+  assert.equal(sha256(await readFile(path.join(CONTROL_PLANE, "public/dataset-catalog/v1/catalog.json"))), datasetSourceLock.catalogSha256);
   assert.match(datasetSourceLock.treeSha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(builtDatasetCatalog.datasets.map((dataset) => dataset.id), ["recovered-clean-videos-v1", "minimal-synthetic"]);
   const recoveredDataset = builtDatasetCatalog.datasets.find((dataset) => dataset.id === "recovered-clean-videos-v1");

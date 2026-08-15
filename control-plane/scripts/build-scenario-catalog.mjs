@@ -163,6 +163,13 @@ function requiredSha256(value, label) {
   return value;
 }
 
+function assertCatalogProjectionLock(catalogBody, sourceLock) {
+  requiredSha256(sourceLock.catalogSha256, "dataset source lock catalogSha256");
+  if (sha256(catalogBody) !== sourceLock.catalogSha256) {
+    fail("dataset catalog projection does not match its source lock");
+  }
+}
+
 async function assertNoSymlinkComponents(file, allowedRoot) {
   const relative = path.relative(allowedRoot, file);
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) fail(`path escapes allowlisted root: ${file}`);
@@ -823,7 +830,10 @@ async function datasetAssetFiles() {
   }
 
   const sourceLock = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json")));
-  allowedObject(sourceLock, new Set(["repository", "revision", "schemaVersion", "treeSha256"]), "dataset source lock");
+  allowedObject(sourceLock,
+    new Set(["catalogSha256", "repository", "revision", "schemaVersion", "treeSha256"]),
+    "dataset source lock");
+  assertCatalogProjectionLock(catalogBody, sourceLock);
   requiredSha256(sourceLock.treeSha256, "dataset source lock treeSha256");
   if (sourceLock.schemaVersion !== "cvbench.dataset-catalog-source/v1"
     || sourceLock.repository !== "https://github.com/the-Drunken-coder/cvbench-dataset"
@@ -835,7 +845,6 @@ async function datasetAssetFiles() {
     || repository.revision !== sourceLock.revision) {
     fail("dataset catalog does not match its source lock");
   }
-
   const files = new Set();
   for (const [datasetIndex, dataset] of catalog.datasets.entries()) {
     if (!Array.isArray(dataset?.clips)) fail(`dataset catalog datasets[${datasetIndex}].clips must be an array`);
@@ -1074,6 +1083,7 @@ if (invokedAsScript) await main();
 
 export {
   allowedObject,
+  assertCatalogProjectionLock,
   assertSafeOutput,
   assertedRegularFile,
   buildCatalog,

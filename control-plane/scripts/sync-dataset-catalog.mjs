@@ -34,12 +34,13 @@ async function settleAll(promises) {
 async function sourceLock() {
   const lock = JSON.parse(await readFile(SOURCE_LOCK, "utf8"));
   const keys = Object.keys(lock).sort();
-  if (JSON.stringify(keys) !== JSON.stringify(["repository", "revision", "schemaVersion", "treeSha256"])) {
+  if (JSON.stringify(keys) !== JSON.stringify(["catalogSha256", "repository", "revision", "schemaVersion", "treeSha256"])) {
     throw new Error("dataset catalog source lock has missing or undeclared fields");
   }
   if (lock.schemaVersion !== "cvbench.dataset-catalog-source/v1"
     || lock.repository !== REPOSITORY_URL
     || !/^[a-f0-9]{40}$/.test(lock.revision)
+    || !/^[a-f0-9]{64}$/.test(lock.catalogSha256)
     || !/^[a-f0-9]{64}$/.test(lock.treeSha256)) {
     throw new Error("dataset catalog source lock is invalid");
   }
@@ -276,7 +277,12 @@ try {
     repository: { name: "cvbench-dataset", url: REPOSITORY_URL, revision: sourceRevision },
     datasets,
   };
-  await writeFile(catalogStaging, `${JSON.stringify(catalog, null, 2)}\n`);
+  const catalogBody = `${JSON.stringify(catalog, null, 2)}\n`;
+  const catalogDigest = sha256(Buffer.from(catalogBody));
+  if (catalogDigest !== lock.catalogSha256) {
+    throw new Error(`dataset catalog projection does not match the source lock: found ${catalogDigest}`);
+  }
+  await writeFile(catalogStaging, catalogBody);
 
   await mkdir(TRACKING, { recursive: true });
   const trackingFiles = await readdir(trackingStaging);
