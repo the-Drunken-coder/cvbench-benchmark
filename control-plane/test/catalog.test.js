@@ -11,6 +11,7 @@ import { parse as parseYaml } from "yaml";
 
 import {
   allowedObject,
+  assertCatalogProjectionLock,
   assertSafeOutput,
   assertedRegularFile,
   buildCatalog,
@@ -22,6 +23,7 @@ import {
   sanitizeFault,
   validateBox,
 } from "../scripts/build-scenario-catalog.mjs";
+import { publishDatasetProjection } from "../scripts/publish-dataset-projection.mjs";
 
 const CONTROL_PLANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT = path.resolve(CONTROL_PLANE, "..");
@@ -55,6 +57,79 @@ function runBuild(output) {
     encoding: "utf8",
   });
 }
+
+test("dataset catalog projection is bound to the source lock", async () => {
+  const catalogBody = await readFile(path.join(CONTROL_PLANE, "public/dataset-catalog/v1/catalog.json"));
+  const sourceLock = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json")));
+  assert.doesNotThrow(() => assertCatalogProjectionLock(catalogBody, sourceLock));
+  const edited = JSON.parse(catalogBody);
+  edited.datasets[0].evaluationEligible = true;
+  assert.throws(
+    () => assertCatalogProjectionLock(Buffer.from(`${JSON.stringify(edited, null, 2)}\n`), sourceLock),
+    /dataset catalog projection does not match its source lock/,
+  );
+});
+
+test("failed dataset catalog publication rolls back new tracking assets", async (context) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "cvbench-dataset-publication-test-"));
+  context.after(async () => rm(temporary, { recursive: true, force: true }));
+  const output = path.join(temporary, "catalog.json");
+  const previewDirectory = path.join(temporary, "previews");
+  const trackingDirectory = path.join(temporary, "tracking");
+  const staging = path.join(temporary, "staging");
+  const catalogStaging = path.join(staging, "catalog.json");
+  const trackingStaging = path.join(staging, "tracking");
+  await mkdir(trackingDirectory, { recursive: true });
+  await mkdir(previewDirectory, { recursive: true });
+  await mkdir(trackingStaging, { recursive: true });
+  await writeFile(output, "old catalog");
+  await writeFile(path.join(previewDirectory, "old.mp4"), "old preview");
+  await writeFile(path.join(trackingDirectory, "old.json"), "old tracking");
+  await writeFile(catalogStaging, "new catalog");
+  await writeFile(path.join(trackingStaging, "new.json"), "new tracking");
+
+  await assert.rejects(publishDatasetProjection({
+    catalogStaging,
+    trackingStaging,
+    output,
+    previewDirectory,
+    previewFiles: [],
+    trackingDirectory,
+    replaceCatalog: async () => { throw new Error("forced catalog replacement failure"); },
+  }), /forced catalog replacement failure/);
+  assert.equal(await readFile(output, "utf8"), "old catalog");
+  assert.deepEqual(await readdir(previewDirectory), ["old.mp4"]);
+  assert.deepEqual(await readdir(trackingDirectory), ["old.json"]);
+});
+
+test("successful dataset catalog publication prunes orphaned previews", async (context) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "cvbench-dataset-preview-test-"));
+  context.after(async () => rm(temporary, { recursive: true, force: true }));
+  const output = path.join(temporary, "catalog.json");
+  const previewDirectory = path.join(temporary, "previews");
+  const trackingDirectory = path.join(temporary, "tracking");
+  const staging = path.join(temporary, "staging");
+  const catalogStaging = path.join(staging, "catalog.json");
+  const trackingStaging = path.join(staging, "tracking");
+  await mkdir(previewDirectory, { recursive: true });
+  await mkdir(trackingDirectory, { recursive: true });
+  await mkdir(trackingStaging, { recursive: true });
+  await writeFile(output, "old catalog");
+  await writeFile(catalogStaging, "new catalog");
+  await writeFile(path.join(previewDirectory, "current.mp4"), "current preview");
+  await writeFile(path.join(previewDirectory, "orphan.mp4"), "orphan preview");
+
+  await publishDatasetProjection({
+    catalogStaging,
+    trackingStaging,
+    output,
+    previewDirectory,
+    previewFiles: ["current.mp4"],
+    trackingDirectory,
+  });
+  assert.equal(await readFile(output, "utf8"), "new catalog");
+  assert.deepEqual(await readdir(previewDirectory), ["current.mp4"]);
+});
 
 test("two clean catalog builds are byte-identical and within budgets", async (context) => {
   const packageJson = JSON.parse(await readFile(path.join(CONTROL_PLANE, "package.json"), "utf8"));
@@ -320,12 +395,14 @@ test("failed atomic replacement preserves the previous complete output", async (
 test("public surfaces use safe DOM rendering, strict CSP, and corrected system terminology", async () => {
   const javascript = await Promise.all(["app.js", "results.js", "operator.js", "scenario-app.js"].map((name) => readFile(path.join(CONTROL_PLANE, "public", name), "utf8")));
   for (const source of javascript) assert.doesNotMatch(source, /\.innerHTML\s*=/i);
-  assert.match(javascript[0], /crypto\.randomUUID\(\)/);
-  assert.match(javascript[0], /\/results\/\?submission=/);
+  const submitSource = javascript[0];
+  assert.doesNotMatch(submitSource, /\.innerHTML\s*=/i);
+  assert.match(submitSource, /crypto\.randomUUID\(\)/);
+  assert.match(submitSource, /\/results\/\?submission=/);
   assert.match(javascript[1], /scores\.replay_profile != null && scores\.replay_rate != null/);
   assert.match(javascript[1], /same exact frame and shared controls/);
   assert.match(javascript[1], /submitted system’s retained track projection/);
-  assert.doesNotMatch(javascript[0], /(?:local|session)Storage/);
+  assert.doesNotMatch(submitSource, /(?:local|session)Storage/);
   assert.doesNotMatch(javascript[1], /(?:local|session)Storage/);
   const headers = await readFile(path.join(CONTROL_PLANE, "public/_headers"), "utf8");
   assert.match(headers, /object-src 'none'/);
@@ -362,19 +439,59 @@ test("public surfaces use safe DOM rendering, strict CSP, and corrected system t
     for (const pattern of banned) assert.doesNotMatch(source, pattern, relative);
   }
   const home = await readFile(path.join(CONTROL_PLANE, "public/index.html"), "utf8");
-  assert.match(home, /Benchmark the whole<br>vision system\./);
-  assert.match(home, /Submit a system image\./);
-  assert.match(home, /id="quick-submit-form"/);
-  assert.match(home, /name="api_key" type="password"/);
-  assert.match(home, /Give your agent one command\./);
+  assert.match(home, /<section class="pane" data-view="datasets">/);
+  assert.match(home, /One command from the system project\./);
   assert.match(home, /cvbench submit \. --wait --json/);
-  assert.match(home, /Already publish images\? Keep the durable path\./);
-  assert.match(home, /action="\/results\/"/);
-  assert.doesNotMatch(home, /src="\/results\.js"/);
-  assert.doesNotMatch(home, /id="status-output"/);
+  assert.match(home, /Submit an existing registry image/);
+  assert.match(home, /type="password"/);
+  assert.match(home, /One read-only index/);
+  assert.match(submitSource, /Synced from/);
+  const builtDatasetCatalog = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dist/dataset-catalog/v1/catalog.json"), "utf8"));
+  const datasetSourceLock = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json"), "utf8"));
+  assert.equal(builtDatasetCatalog.repository.name, "cvbench-dataset");
+  assert.equal(builtDatasetCatalog.repository.revision, datasetSourceLock.revision);
+  assert.equal(sha256(await readFile(path.join(CONTROL_PLANE, "public/dataset-catalog/v1/catalog.json"))), datasetSourceLock.catalogSha256);
+  assert.match(datasetSourceLock.treeSha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(builtDatasetCatalog.datasets.map((dataset) => dataset.id), ["recovered-clean-videos-v1", "minimal-synthetic"]);
+  const recoveredDataset = builtDatasetCatalog.datasets.find((dataset) => dataset.id === "recovered-clean-videos-v1");
+  assert.equal(recoveredDataset.evaluationEligible, false);
+  for (const clip of recoveredDataset.clips) {
+    assert.equal(clip.preview.sourceSha256, clip.sourceSha256);
+    assert.equal(clip.preview.url,
+      `/dataset-catalog/v1/previews/${recoveredDataset.id}.${clip.id}.${clip.sourceSha256.slice(0, 12)}.${clip.preview.sha256.slice(0, 12)}.mp4`);
+    assert.equal(clip.tracking.url,
+      `/dataset-catalog/v1/tracking/${recoveredDataset.id}.${clip.id}.${clip.tracking.sha256.slice(0, 12)}.json`);
+    const trackingBody = await readFile(path.join(CONTROL_PLANE, "dist", clip.tracking.url));
+    assert.equal(trackingBody.length, clip.tracking.bytes);
+    assert.equal(sha256(trackingBody), clip.tracking.sha256);
+    const tracking = JSON.parse(trackingBody);
+    assert.equal(tracking.schemaVersion, "cvbench.browser-boxes/v2");
+    assert.equal(tracking.scope, "sparse");
+    assert.equal(tracking.boxes.length, clip.annotationRows);
+    for (const box of tracking.boxes) {
+      assert.equal(box.length, 8);
+      const [timestampNs, x1, y1, x2, y2, trackId, classId, confidence] = box;
+      assert.ok(Number.isSafeInteger(timestampNs) && timestampNs >= 0);
+      assert.match(trackId, /^(?:dog|person)-\d{4}$/);
+      assert.ok(["dog", "person"].includes(classId));
+      assert.ok(confidence >= 0 && confidence <= 1);
+      assert.ok(x1 >= 0 && y1 >= 0 && x2 <= clip.media.width && y2 <= clip.media.height && x2 > x1 && y2 > y1);
+    }
+    const preview = await readFile(path.join(CONTROL_PLANE, "dist", clip.preview.url));
+    assert.equal(preview.length, clip.preview.bytes);
+    assert.equal(sha256(preview), clip.preview.sha256);
+    assert.ok(preview.length < 5 * 1024 * 1024);
+  }
+  const syntheticClip = builtDatasetCatalog.datasets.find((dataset) => dataset.id === "minimal-synthetic").clips[0];
+  assert.equal(syntheticClip.preview, null);
+  assert.equal(syntheticClip.tracking, null);
+  assert.match(await readFile(path.join(CONTROL_PLANE, "dist/_headers"), "utf8"), /dataset-catalog\/v1\/tracking\/\*[\s\S]*immutable/);
+  for (const route of ["datasets", "docs", "runs", "submit"]) {
+    assert.equal(await readFile(path.join(CONTROL_PLANE, `dist/${route}/index.html`), "utf8"), await readFile(path.join(CONTROL_PLANE, "dist/index.html"), "utf8"));
+  }
   const results = await readFile(path.join(CONTROL_PLANE, "public/results/index.html"), "utf8");
   assert.match(results, /Public result studio/);
   assert.match(results, /id="status-output"/);
   assert.match(results, /src="\/results\.js"/);
-  assert.doesNotMatch(results, /src="\/app\.js"/);
+  assert.doesNotMatch(results, /operator\.html/);
 });

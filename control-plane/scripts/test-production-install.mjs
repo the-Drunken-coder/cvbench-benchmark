@@ -25,6 +25,7 @@ try {
   }
   const stagedControlPlane = path.join(temporaryRoot, "control-plane");
   await mkdir(path.join(stagedControlPlane, "scripts"), { recursive: true });
+  await cp(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json"), path.join(stagedControlPlane, "dataset-catalog-source.lock.json"));
   await cp(path.join(CONTROL_PLANE, "package.json"), path.join(stagedControlPlane, "package.json"));
   await cp(path.join(CONTROL_PLANE, "package-lock.json"), path.join(stagedControlPlane, "package-lock.json"));
   await cp(path.join(CONTROL_PLANE, "public"), path.join(stagedControlPlane, "public"), { recursive: true });

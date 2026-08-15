@@ -205,12 +205,13 @@ test("quick submit safely retries and opens the formatted playback result", asyn
   });
 
   try {
-    await page.goto(`http://127.0.0.1:${server.address().port}/`);
-    await page.locator("[name=image]").fill(`ghcr.io/example/tracker@sha256:${"a".repeat(64)}`);
-    await page.locator("[name=name]").fill("CVBench Synthetic Color Tracker");
-    await page.locator("[name=model_version]").fill("759b01d-v1");
-    await page.locator(".argv-row input").nth(2).fill("cvbench.examples.good_tracker");
-    await page.locator("[name=api_key]").fill("temporary-browser-key");
+    await page.goto(`http://127.0.0.1:${server.address().port}/submit/`);
+    await page.getByText("Submit an existing registry image", { exact: true }).click();
+    await page.getByLabel("Public image digest").fill(`ghcr.io/example/tracker@sha256:${"a".repeat(64)}`);
+    await page.getByLabel("System name").fill("CVBench Synthetic Color Tracker");
+    await page.getByLabel("System version").fill("759b01d-v1");
+    await page.getByLabel("Command arguments").fill('["python", "-m", "cvbench.examples.good_tracker"]');
+    await page.getByLabel("Submission API key").fill("temporary-browser-key");
     await page.getByRole("button", { name: "Queue system" }).click();
     await assert.doesNotReject(page.getByText("Temporary queue interruption.").waitFor());
     await page.getByRole("button", { name: "Queue system" }).click();

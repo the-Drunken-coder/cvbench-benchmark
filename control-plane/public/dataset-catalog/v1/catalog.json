@@ -1,0 +1,235 @@
+{
+  "schemaVersion": "cvbench.dataset-catalog/v1",
+  "repository": {
+    "name": "cvbench-dataset",
+    "url": "https://github.com/the-Drunken-coder/cvbench-dataset",
+    "revision": "74b8ddd0501586adebbf5a2be605b4483323fdee"
+  },
+  "datasets": [
+    {
+      "id": "recovered-clean-videos-v1",
+      "title": "Recovered clean videos dense segmentation tracks",
+      "description": "Five hash-pinned Pixabay and Pexels videos processed at native cadence with YOLO26x-seg and TrackTrack appearance association. Dense model output is pending human review and is not ground truth.",
+      "path": "datasets/recovered-clean-videos-v1",
+      "collection": "dataset",
+      "version": "0.2.0",
+      "state": "draft",
+      "dataRole": "training_only",
+      "annotationScope": "sparse",
+      "evaluationEligible": false,
+      "requiredIndependentApprovals": 2,
+      "clips": [
+        {
+          "id": "pexels-18187166-dune",
+          "title": "Dune",
+          "path": "clips/pexels-18187166-dune",
+          "sourceTitle": "Florian Delee - pexels-18187166-dune",
+          "sourceUri": "https://www.pexels.com/video/a-man-walking-up-a-sand-dune-in-the-desert-18187166/",
+          "sourceSha256": "05bc3794c11d787e946d868f6d5e2d1a40b0939dc6218aa3263b138adc64e0cc",
+          "license": {
+            "name": "Pexels License",
+            "spdx": "LicenseRef-Pexels",
+            "url": "https://www.pexels.com/license/"
+          },
+          "media": {
+            "frameCount": 718,
+            "width": 3840,
+            "height": 2160,
+            "fpsNumerator": 60000,
+            "fpsDenominator": 1001
+          },
+          "annotationRows": 379,
+          "humanApprovals": 0,
+          "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pexels-18187166-dune.05bc3794c11d.9465c0693330.mp4",
+            "sha256": "9465c06933302af3a8dab6b4266fccc61880bff0870273018af5d21660d282e7",
+            "sourceSha256": "05bc3794c11d787e946d868f6d5e2d1a40b0939dc6218aa3263b138adc64e0cc",
+            "bytes": 236082
+          },
+          "tracking": {
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pexels-18187166-dune.c033bbc3a2f0.json",
+            "sha256": "c033bbc3a2f0f9d15c311074f6f28e8813eee120ef88cb851b716b1db2d13c67",
+            "bytes": 24255
+          }
+        },
+        {
+          "id": "pixabay-112059-dog-road",
+          "title": "Dog road",
+          "path": "clips/pixabay-112059-dog-road",
+          "sourceTitle": "RuslanSikunov - pixabay-112059-dog-road",
+          "sourceUri": "https://pixabay.com/videos/young-woman-road-walk-in-the-woods-112059/",
+          "sourceSha256": "b9fdd57c97d629552dcdb6063a88827a27dfa240834d39cd47dc992207842c1b",
+          "license": {
+            "name": "Pixabay Content License",
+            "spdx": "LicenseRef-Pixabay-Content",
+            "url": "https://pixabay.com/service/license-summary/"
+          },
+          "media": {
+            "frameCount": 406,
+            "width": 3840,
+            "height": 2160,
+            "fpsNumerator": 30,
+            "fpsDenominator": 1
+          },
+          "annotationRows": 758,
+          "humanApprovals": 0,
+          "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pixabay-112059-dog-road.b9fdd57c97d6.863b942a5735.mp4",
+            "sha256": "863b942a5735af180465564be91c7441f3643e0bdea477ee2033b04872f93f5f",
+            "sourceSha256": "b9fdd57c97d629552dcdb6063a88827a27dfa240834d39cd47dc992207842c1b",
+            "bytes": 374847
+          },
+          "tracking": {
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pixabay-112059-dog-road.205b09287c77.json",
+            "sha256": "205b09287c7723aeaf079b5eeb9b2eebe7ef5fd7413d57d08157ebe211067c0e",
+            "bytes": 45736
+          }
+        },
+        {
+          "id": "pixabay-145851-forest-bench",
+          "title": "Forest bench",
+          "path": "clips/pixabay-145851-forest-bench",
+          "sourceTitle": "Matias_Luge - pixabay-145851-forest-bench",
+          "sourceUri": "https://pixabay.com/videos/man-trees-nature-forest-145851/",
+          "sourceSha256": "b22382b1e94ca5189ff76a9ce37dd71660a36a785d0b50f897a23db363b083d9",
+          "license": {
+            "name": "Pixabay Content License",
+            "spdx": "LicenseRef-Pixabay-Content",
+            "url": "https://pixabay.com/service/license-summary/"
+          },
+          "media": {
+            "frameCount": 468,
+            "width": 3840,
+            "height": 2160,
+            "fpsNumerator": 30000,
+            "fpsDenominator": 1001
+          },
+          "annotationRows": 364,
+          "humanApprovals": 0,
+          "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pixabay-145851-forest-bench.b22382b1e94c.99c06564156e.mp4",
+            "sha256": "99c06564156e4b94873ef37c4adac239637bb8f74e9cc01fd2335f2ce5ad0124",
+            "sourceSha256": "b22382b1e94ca5189ff76a9ce37dd71660a36a785d0b50f897a23db363b083d9",
+            "bytes": 603169
+          },
+          "tracking": {
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pixabay-145851-forest-bench.9cbf01a2d7a5.json",
+            "sha256": "9cbf01a2d7a5af40b12eb8468032bdc9a08ae2185bf3203ab6a1a5d80d8066fb",
+            "bytes": 23226
+          }
+        },
+        {
+          "id": "pixabay-212474-forest-walk",
+          "title": "Forest walk",
+          "path": "clips/pixabay-212474-forest-walk",
+          "sourceTitle": "Matthias_Groeneveld - pixabay-212474-forest-walk",
+          "sourceUri": "https://pixabay.com/videos/man-walking-forest-alone-trees-212474/",
+          "sourceSha256": "1f0b743c9b2af9fefe8c6dae05adb613b24b59c94f8bf2319d726eaee720177a",
+          "license": {
+            "name": "Pixabay Content License",
+            "spdx": "LicenseRef-Pixabay-Content",
+            "url": "https://pixabay.com/service/license-summary/"
+          },
+          "media": {
+            "frameCount": 309,
+            "width": 3840,
+            "height": 2160,
+            "fpsNumerator": 30000,
+            "fpsDenominator": 1001
+          },
+          "annotationRows": 309,
+          "humanApprovals": 0,
+          "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pixabay-212474-forest-walk.1f0b743c9b2a.5cb9ec9618ef.mp4",
+            "sha256": "5cb9ec9618ef1f2b7e30d4a7d89887f385dfcfd03452902379a31e9c141ece39",
+            "sourceSha256": "1f0b743c9b2af9fefe8c6dae05adb613b24b59c94f8bf2319d726eaee720177a",
+            "bytes": 1193168
+          },
+          "tracking": {
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pixabay-212474-forest-walk.941e11242772.json",
+            "sha256": "941e112427728a43f0762189a96d67eabe573c12da146d3fb6bdf10833671169",
+            "bytes": 20099
+          }
+        },
+        {
+          "id": "pixabay-28855-ravine",
+          "title": "Ravine",
+          "path": "clips/pixabay-28855-ravine",
+          "sourceTitle": "spoot (Alex Kuimov) - pixabay-28855-ravine",
+          "sourceUri": "https://pixabay.com/videos/autumn-forest-tourists-walk-stream-28855/",
+          "sourceSha256": "825d9707b99ad212efc94e0dda630ba9253239b404c960002c7b385386e69641",
+          "license": {
+            "name": "Pixabay Content License",
+            "spdx": "LicenseRef-Pixabay-Content",
+            "url": "https://pixabay.com/service/license-summary/"
+          },
+          "media": {
+            "frameCount": 1467,
+            "width": 1920,
+            "height": 1080,
+            "fpsNumerator": 30,
+            "fpsDenominator": 1
+          },
+          "annotationRows": 1601,
+          "humanApprovals": 0,
+          "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
+          "preview": {
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pixabay-28855-ravine.825d9707b99a.04dbf8f38f3b.mp4",
+            "sha256": "04dbf8f38f3b9de6dd65391ef531e529251ca559b31a5d162ff36dc70539a031",
+            "sourceSha256": "825d9707b99ad212efc94e0dda630ba9253239b404c960002c7b385386e69641",
+            "bytes": 1536697
+          },
+          "tracking": {
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pixabay-28855-ravine.b5c34f482fec.json",
+            "sha256": "b5c34f482feca2cc1414961fd235828cf3cf3b5b1633fe16634a8de6a473743a",
+            "bytes": 100015
+          }
+        }
+      ]
+    },
+    {
+      "id": "minimal-synthetic",
+      "title": "Minimal synthetic certification fixture",
+      "description": "Two tiny synthetic frames used only to exercise the package and release contract.",
+      "path": "examples/minimal-certified",
+      "collection": "example",
+      "version": "1.0.0",
+      "state": "certified",
+      "dataRole": "benchmark_truth",
+      "annotationScope": "exhaustive_visible",
+      "evaluationEligible": true,
+      "requiredIndependentApprovals": 2,
+      "clips": [
+        {
+          "id": "synthetic-clip",
+          "title": "Synthetic clip",
+          "path": "clips/synthetic-clip",
+          "sourceTitle": "Programmatically generated 16 by 16 fixture",
+          "sourceUri": "synthetic://cvbench/minimal-certified/synthetic-clip",
+          "sourceSha256": "c958b1b95a673db11c1a162701d8b997bdcc5b723408cd669659e07f1ba1a898",
+          "license": {
+            "name": "MIT License",
+            "spdx": "MIT",
+            "url": "https://opensource.org/license/mit"
+          },
+          "media": {
+            "frameCount": 2,
+            "width": 16,
+            "height": 16,
+            "fpsNumerator": 2,
+            "fpsDenominator": 1
+          },
+          "annotationRows": 2,
+          "humanApprovals": 2,
+          "model": null,
+          "preview": null,
+          "tracking": null
+        }
+      ]
+    }
+  ]
+}

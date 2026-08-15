@@ -18,6 +18,7 @@ const STATIC_FILES = [
   "_headers",
   "app.js",
   "404.html",
+  "dataset-catalog/v1/catalog.json",
   "index.html",
   "operator.html",
   "operator.js",
@@ -28,13 +29,14 @@ const STATIC_FILES = [
   "scenarios/index.html",
   "styles.css",
 ];
+const APP_ROUTE_DIRECTORIES = ["datasets", "docs", "runs", "submit"];
 const BENCHMARK_FILES = [
   "benchmarks/long-running-stability.yaml",
   "benchmarks/persistent-target-tracking.yaml",
   "benchmarks/public-whole-system-v3.yaml",
   "benchmarks/real-video-v2.yaml",
 ];
-const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".html", ".jpg", ".js", ".json"]);
+const ALLOWED_PUBLISHED_EXTENSIONS = new Set(["", ".css", ".html", ".jpg", ".js", ".json", ".mp4"]);
 const PRIVATE_PATH_PATTERN = /(?:^|\/)(?:\.dev\.vars|\.env(?:\.|$)|.*(?:credential|secret|contact|note|failure[-_]?packet|raw[-_]?report|d1[-_]?export|private[-_]?log).*)(?:\/|$)/i;
 const PRIVATE_FIELD_PATTERN = /(?:api[-_]?key|token|secret|credential|password|private|local[-_]?path|absolute[-_]?path|contact|notes?|failure[-_]?packet|raw[-_]?report|d1[-_]?(?:export|internal|database|binding)|operator|lease)/i;
 const PRIVATE_CONTENT_PATTERNS = [
@@ -161,6 +163,13 @@ function requiredSha256(value, label) {
   return value;
 }
 
+function assertCatalogProjectionLock(catalogBody, sourceLock) {
+  requiredSha256(sourceLock.catalogSha256, "dataset source lock catalogSha256");
+  if (sha256(catalogBody) !== sourceLock.catalogSha256) {
+    fail("dataset catalog projection does not match its source lock");
+  }
+}
+
 async function assertNoSymlinkComponents(file, allowedRoot) {
   const relative = path.relative(allowedRoot, file);
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) fail(`path escapes allowlisted root: ${file}`);
@@ -201,6 +210,17 @@ function assertSafeOutput(output) {
 
 function finiteNumber(value, label) {
   if (typeof value !== "number" || !Number.isFinite(value)) fail(`${label} must be finite`);
+}
+
+function nonNegativeInteger(value, label) {
+  if (!Number.isInteger(value) || value < 0) fail(`${label} must be a non-negative integer`);
+  return value;
+}
+
+function declaredPath(value, prefix, label) {
+  requiredString(value, label);
+  if (!value.startsWith(prefix) || value.includes("..") || path.isAbsolute(value)) fail(`${label} is outside ${prefix}`);
+  return value;
 }
 
 function validateBox(box, width, height, label) {
@@ -800,7 +820,74 @@ async function scenarioDocument({ id, manifestPath, membership, metadata, baseli
   };
 }
 
-async function assertStaticAllowlist() {
+async function datasetAssetFiles() {
+  const catalogBody = await readFile(path.join(PUBLIC, "dataset-catalog/v1/catalog.json"));
+  if (catalogBody.length > MAX_CATALOG_BYTES) fail("dataset catalog exceeds 256 KiB");
+  const catalog = JSON.parse(catalogBody);
+  allowedObject(catalog, new Set(["datasets", "repository", "schemaVersion"]), "dataset catalog");
+  if (catalog.schemaVersion !== "cvbench.dataset-catalog/v1" || !Array.isArray(catalog.datasets)) {
+    fail("invalid dataset catalog schema");
+  }
+
+  const sourceLock = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json")));
+  allowedObject(sourceLock,
+    new Set(["catalogSha256", "repository", "revision", "schemaVersion", "treeSha256"]),
+    "dataset source lock");
+  assertCatalogProjectionLock(catalogBody, sourceLock);
+  requiredSha256(sourceLock.treeSha256, "dataset source lock treeSha256");
+  if (sourceLock.schemaVersion !== "cvbench.dataset-catalog-source/v1"
+    || sourceLock.repository !== "https://github.com/the-Drunken-coder/cvbench-dataset"
+    || !/^[a-f0-9]{40}$/.test(sourceLock.revision)) {
+    fail("invalid dataset source lock");
+  }
+  const repository = allowedObject(catalog.repository, new Set(["name", "revision", "url"]), "dataset catalog repository");
+  if (repository.name !== "cvbench-dataset" || repository.url !== sourceLock.repository
+    || repository.revision !== sourceLock.revision) {
+    fail("dataset catalog does not match its source lock");
+  }
+  const files = new Set();
+  for (const [datasetIndex, dataset] of catalog.datasets.entries()) {
+    const datasetId = requiredString(dataset?.id, `dataset catalog datasets[${datasetIndex}].id`);
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(datasetId)) fail(`dataset catalog datasets[${datasetIndex}].id is invalid`);
+    if (!Array.isArray(dataset?.clips)) fail(`dataset catalog datasets[${datasetIndex}].clips must be an array`);
+    for (const [clipIndex, clip] of dataset.clips.entries()) {
+      const label = `dataset catalog datasets[${datasetIndex}].clips[${clipIndex}]`;
+      const id = requiredString(clip?.id, `${label}.id`);
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) fail(`${label}.id is invalid`);
+      const sourceSha256 = requiredSha256(clip.sourceSha256, `${label}.sourceSha256`);
+      if (clip.tracking && !clip.preview) fail(`${label}.tracking requires a preview`);
+
+      for (const [kind, asset] of [["preview", clip.preview], ["tracking", clip.tracking]]) {
+        if (asset === null) continue;
+        const fields = kind === "preview"
+          ? new Set(["bytes", "sha256", "sourceSha256", "url"])
+          : new Set(["bytes", "sha256", "url"]);
+        allowedObject(asset, fields, `${label}.${kind}`);
+        const digest = requiredSha256(asset.sha256, `${label}.${kind}.sha256`);
+        if (!Number.isInteger(asset.bytes) || asset.bytes <= 0 || asset.bytes > MAX_ASSET_BYTES) {
+          fail(`${label}.${kind}.bytes is invalid`);
+        }
+        const filename = kind === "preview"
+          ? `${datasetId}.${id}.${sourceSha256.slice(0, 12)}.${digest.slice(0, 12)}.mp4`
+          : `${datasetId}.${id}.${digest.slice(0, 12)}.json`;
+        if (kind === "preview" && asset.sourceSha256 !== sourceSha256) {
+          fail(`${label}.preview is not bound to the source media hash`);
+        }
+        const relative = `dataset-catalog/v1/${kind === "preview" ? "previews" : "tracking"}/${filename}`;
+        if (asset.url !== `/${relative}` || files.has(relative)) fail(`${label}.${kind}.url is invalid`);
+        const file = path.join(PUBLIC, relative);
+        const info = await assertedRegularFile(file, PUBLIC);
+        if (info.size !== asset.bytes || sha256(await readFile(file)) !== digest) {
+          fail(`${label}.${kind} does not match its declared bytes and hash`);
+        }
+        files.add(relative);
+      }
+    }
+  }
+  return [...files].sort();
+}
+
+async function assertStaticAllowlist(expectedFiles) {
   const actual = [];
   async function walk(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -813,7 +900,7 @@ async function assertStaticAllowlist() {
   }
   await walk(PUBLIC);
   actual.sort();
-  const expected = [...STATIC_FILES].sort();
+  const expected = [...expectedFiles].sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) fail(`public source allowlist mismatch: ${actual.join(", ")}`);
 }
 
@@ -831,7 +918,7 @@ async function outputEvidence(output) {
         if (PRIVATE_PATH_PATTERN.test(relative)) fail(`private artifact path in output: ${relative}`);
         const body = await readFile(file);
         if (body.length > MAX_ASSET_BYTES) fail(`published file exceeds 25 MiB: ${relative}`);
-        if (path.extname(relative) !== ".jpg") {
+        if (![".jpg", ".mp4"].includes(extension)) {
           const text = body.toString("utf8");
           for (const pattern of PRIVATE_CONTENT_PATTERNS) {
             if (pattern.test(text)) fail(`private artifact content in output: ${relative}`);
@@ -879,7 +966,8 @@ async function buildCatalog(output, { metadataSource } = {}) {
   const baselines = await loadBaselineEvidence(path.join(CATALOG_SOURCE, "baselines.json"), CATALOG_SOURCE, ids);
   const expectedHashes = await expectedRealHashes();
   const realFrames = await loadRealFrameArchives(expectedHashes);
-  await assertStaticAllowlist();
+  const staticFiles = [...STATIC_FILES, ...await datasetAssetFiles()];
+  await assertStaticAllowlist(staticFiles);
 
   // Validate every declared record, path, hash, geometry, and size before replacing output.
   const preflightFrames = new Set();
@@ -900,12 +988,17 @@ async function buildCatalog(output, { metadataSource } = {}) {
   const buildOutput = await mkdtemp(path.join(path.dirname(output), `.${path.basename(output)}-staging-`));
   let installed = false;
   try {
-    for (const relative of STATIC_FILES) {
+    for (const relative of staticFiles) {
       const source = path.join(PUBLIC, relative);
       await assertedRegularFile(source, PUBLIC);
       const destination = path.join(buildOutput, relative);
       await mkdir(path.dirname(destination), { recursive: true });
       await cp(source, destination);
+    }
+    for (const route of APP_ROUTE_DIRECTORIES) {
+      const destination = path.join(buildOutput, route, "index.html");
+      await mkdir(path.dirname(destination), { recursive: true });
+      await cp(path.join(PUBLIC, "index.html"), destination);
     }
 
     const publishedFrames = new Set();
@@ -992,6 +1085,7 @@ if (invokedAsScript) await main();
 
 export {
   allowedObject,
+  assertCatalogProjectionLock,
   assertSafeOutput,
   assertedRegularFile,
   buildCatalog,
