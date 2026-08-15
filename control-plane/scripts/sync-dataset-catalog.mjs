@@ -135,7 +135,7 @@ async function preview(datasetId, id, sourceSha256) {
   try {
     const sourcePrefix = sourceSha256.slice(0, 12);
     const candidates = (await readdir(PREVIEWS))
-      .filter((filename) => filename.startsWith(`${datasetId}.${id}.`) && filename.endsWith(".mp4"));
+      .filter((filename) => filename.startsWith(`${datasetId}.${id}.${sourcePrefix}.`) && filename.endsWith(".mp4"));
     if (candidates.length === 0) return null;
     if (candidates.length > 1) throw new Error(`${id} has multiple browser previews`);
 
