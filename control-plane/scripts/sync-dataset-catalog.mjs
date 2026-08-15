@@ -2,12 +2,14 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { parse as parseYaml } from "yaml";
+
+import { publishDatasetProjection } from "./publish-dataset-projection.mjs";
 
 const CONTROL_PLANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = path.join(CONTROL_PLANE, "public/dataset-catalog/v1/catalog.json");
@@ -287,16 +289,7 @@ try {
   }
   await writeFile(catalogStaging, catalogBody);
 
-  await mkdir(TRACKING, { recursive: true });
-  const trackingFiles = await readdir(trackingStaging);
-  for (const filename of trackingFiles) {
-    await rename(path.join(trackingStaging, filename), path.join(TRACKING, filename));
-  }
-  await rename(catalogStaging, OUTPUT);
-  const currentTracking = new Set(trackingFiles);
-  for (const filename of await readdir(TRACKING)) {
-    if (!currentTracking.has(filename)) await rm(path.join(TRACKING, filename));
-  }
+  await publishDatasetProjection({ catalogStaging, trackingStaging, output: OUTPUT, trackingDirectory: TRACKING });
   process.stdout.write(`Synced ${datasets.length} datasets and ${datasets.flatMap((dataset) => dataset.clips).length} clips from ${catalog.repository.revision}.\n`);
 } finally {
   await rm(stagingRoot, { recursive: true, force: true });

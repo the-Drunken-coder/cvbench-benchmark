@@ -23,6 +23,7 @@ import {
   sanitizeFault,
   validateBox,
 } from "../scripts/build-scenario-catalog.mjs";
+import { publishDatasetProjection } from "../scripts/publish-dataset-projection.mjs";
 
 const CONTROL_PLANE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT = path.resolve(CONTROL_PLANE, "..");
@@ -67,6 +68,32 @@ test("dataset catalog projection is bound to the source lock", async () => {
     () => assertCatalogProjectionLock(Buffer.from(`${JSON.stringify(edited, null, 2)}\n`), sourceLock),
     /dataset catalog projection does not match its source lock/,
   );
+});
+
+test("failed dataset catalog publication rolls back new tracking assets", async (context) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "cvbench-dataset-publication-test-"));
+  context.after(async () => rm(temporary, { recursive: true, force: true }));
+  const output = path.join(temporary, "catalog.json");
+  const trackingDirectory = path.join(temporary, "tracking");
+  const staging = path.join(temporary, "staging");
+  const catalogStaging = path.join(staging, "catalog.json");
+  const trackingStaging = path.join(staging, "tracking");
+  await mkdir(trackingDirectory, { recursive: true });
+  await mkdir(trackingStaging, { recursive: true });
+  await writeFile(output, "old catalog");
+  await writeFile(path.join(trackingDirectory, "old.json"), "old tracking");
+  await writeFile(catalogStaging, "new catalog");
+  await writeFile(path.join(trackingStaging, "new.json"), "new tracking");
+
+  await assert.rejects(publishDatasetProjection({
+    catalogStaging,
+    trackingStaging,
+    output,
+    trackingDirectory,
+    replaceCatalog: async () => { throw new Error("forced catalog replacement failure"); },
+  }), /forced catalog replacement failure/);
+  assert.equal(await readFile(output, "utf8"), "old catalog");
+  assert.deepEqual(await readdir(trackingDirectory), ["old.json"]);
 });
 
 test("two clean catalog builds are byte-identical and within budgets", async (context) => {
