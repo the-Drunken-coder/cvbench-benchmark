@@ -289,7 +289,16 @@ try {
   }
   await writeFile(catalogStaging, catalogBody);
 
-  await publishDatasetProjection({ catalogStaging, trackingStaging, output: OUTPUT, trackingDirectory: TRACKING });
+  const previewFiles = datasets.flatMap((dataset) => dataset.clips)
+    .flatMap((clip) => clip.preview ? [path.basename(clip.preview.url)] : []);
+  await publishDatasetProjection({
+    catalogStaging,
+    trackingStaging,
+    output: OUTPUT,
+    previewDirectory: PREVIEWS,
+    previewFiles,
+    trackingDirectory: TRACKING,
+  });
   process.stdout.write(`Synced ${datasets.length} datasets and ${datasets.flatMap((dataset) => dataset.clips).length} clips from ${catalog.repository.revision}.\n`);
 } finally {
   await rm(stagingRoot, { recursive: true, force: true });

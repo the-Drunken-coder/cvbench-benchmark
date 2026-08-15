@@ -74,13 +74,16 @@ test("failed dataset catalog publication rolls back new tracking assets", async 
   const temporary = await mkdtemp(path.join(os.tmpdir(), "cvbench-dataset-publication-test-"));
   context.after(async () => rm(temporary, { recursive: true, force: true }));
   const output = path.join(temporary, "catalog.json");
+  const previewDirectory = path.join(temporary, "previews");
   const trackingDirectory = path.join(temporary, "tracking");
   const staging = path.join(temporary, "staging");
   const catalogStaging = path.join(staging, "catalog.json");
   const trackingStaging = path.join(staging, "tracking");
   await mkdir(trackingDirectory, { recursive: true });
+  await mkdir(previewDirectory, { recursive: true });
   await mkdir(trackingStaging, { recursive: true });
   await writeFile(output, "old catalog");
+  await writeFile(path.join(previewDirectory, "old.mp4"), "old preview");
   await writeFile(path.join(trackingDirectory, "old.json"), "old tracking");
   await writeFile(catalogStaging, "new catalog");
   await writeFile(path.join(trackingStaging, "new.json"), "new tracking");
@@ -89,11 +92,43 @@ test("failed dataset catalog publication rolls back new tracking assets", async 
     catalogStaging,
     trackingStaging,
     output,
+    previewDirectory,
+    previewFiles: [],
     trackingDirectory,
     replaceCatalog: async () => { throw new Error("forced catalog replacement failure"); },
   }), /forced catalog replacement failure/);
   assert.equal(await readFile(output, "utf8"), "old catalog");
+  assert.deepEqual(await readdir(previewDirectory), ["old.mp4"]);
   assert.deepEqual(await readdir(trackingDirectory), ["old.json"]);
+});
+
+test("successful dataset catalog publication prunes orphaned previews", async (context) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "cvbench-dataset-preview-test-"));
+  context.after(async () => rm(temporary, { recursive: true, force: true }));
+  const output = path.join(temporary, "catalog.json");
+  const previewDirectory = path.join(temporary, "previews");
+  const trackingDirectory = path.join(temporary, "tracking");
+  const staging = path.join(temporary, "staging");
+  const catalogStaging = path.join(staging, "catalog.json");
+  const trackingStaging = path.join(staging, "tracking");
+  await mkdir(previewDirectory, { recursive: true });
+  await mkdir(trackingDirectory, { recursive: true });
+  await mkdir(trackingStaging, { recursive: true });
+  await writeFile(output, "old catalog");
+  await writeFile(catalogStaging, "new catalog");
+  await writeFile(path.join(previewDirectory, "current.mp4"), "current preview");
+  await writeFile(path.join(previewDirectory, "orphan.mp4"), "orphan preview");
+
+  await publishDatasetProjection({
+    catalogStaging,
+    trackingStaging,
+    output,
+    previewDirectory,
+    previewFiles: ["current.mp4"],
+    trackingDirectory,
+  });
+  assert.equal(await readFile(output, "utf8"), "new catalog");
+  assert.deepEqual(await readdir(previewDirectory), ["current.mp4"]);
 });
 
 test("two clean catalog builds are byte-identical and within budgets", async (context) => {

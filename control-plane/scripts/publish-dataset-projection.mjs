@@ -5,11 +5,14 @@ export async function publishDatasetProjection({
   catalogStaging,
   trackingStaging,
   output,
+  previewDirectory,
+  previewFiles,
   trackingDirectory,
   replaceCatalog = rename,
 }) {
   for (const [target, label, expectedType] of [
     [output, "catalog", "file"],
+    [previewDirectory, "preview directory", "directory"],
     [trackingDirectory, "tracking directory", "directory"],
   ]) {
     const info = await lstat(target);
@@ -56,5 +59,9 @@ export async function publishDatasetProjection({
   const currentTracking = new Set(trackingFiles);
   for (const filename of await readdir(trackingDirectory)) {
     if (!currentTracking.has(filename)) await rm(path.join(trackingDirectory, filename));
+  }
+  const currentPreviews = new Set(previewFiles);
+  for (const filename of await readdir(previewDirectory)) {
+    if (!currentPreviews.has(filename)) await rm(path.join(previewDirectory, filename));
   }
 }
