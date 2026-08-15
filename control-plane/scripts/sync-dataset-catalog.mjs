@@ -128,8 +128,9 @@ async function tracking(directory, id, scope, rows, media) {
   };
 }
 
-async function preview(id) {
+async function preview(id, sourceSha256) {
   try {
+    const sourcePrefix = sourceSha256.slice(0, 12);
     const candidates = (await readdir(PREVIEWS))
       .filter((filename) => filename.startsWith(`${id}.`) && filename.endsWith(".mp4"));
     if (candidates.length === 0) return null;
@@ -138,12 +139,13 @@ async function preview(id) {
     const [filename] = candidates;
     const body = await readFile(path.join(PREVIEWS, filename));
     const digest = sha256(body);
-    if (filename !== `${id}.${digest.slice(0, 12)}.mp4`) {
-      throw new Error(`${id} preview filename does not match its content hash`);
+    if (filename !== `${id}.${sourcePrefix}.${digest.slice(0, 12)}.mp4`) {
+      throw new Error(`${id} preview filename does not match its source and content hashes`);
     }
     return {
       url: `/dataset-catalog/v1/previews/${filename}`,
       sha256: digest,
+      sourceSha256,
       bytes: body.length,
     };
   } catch (error) {
@@ -207,7 +209,7 @@ async function readDataset(declaration, trackingDirectory) {
       fpsNumerator: required(source.media?.fps_numerator, `${id}.media.fps_numerator`),
       fpsDenominator: required(source.media?.fps_denominator, `${id}.media.fps_denominator`),
     };
-    const clipPreview = await preview(id);
+    const clipPreview = await preview(id, sourceSha256);
     const clipTracking = clipPreview && tracks.length
       ? await tracking(trackingDirectory, id, required(descriptor.annotation_scope, `${declaration.path}.annotation_scope`), tracks, media)
       : null;

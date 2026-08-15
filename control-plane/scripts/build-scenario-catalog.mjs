@@ -14,20 +14,6 @@ const ROOT = path.resolve(CONTROL_PLANE, "..");
 const PUBLIC = path.join(CONTROL_PLANE, "public");
 const CATALOG_SOURCE = path.join(ROOT, "scenario-catalog");
 const DEFAULT_OUTPUT = path.join(CONTROL_PLANE, "dist");
-const DATASET_PREVIEW_FILES = [
-  "dataset-catalog/v1/previews/pexels-18187166-dune.9465c0693330.mp4",
-  "dataset-catalog/v1/previews/pixabay-112059-dog-road.863b942a5735.mp4",
-  "dataset-catalog/v1/previews/pixabay-145851-forest-bench.99c06564156e.mp4",
-  "dataset-catalog/v1/previews/pixabay-212474-forest-walk.5cb9ec9618ef.mp4",
-  "dataset-catalog/v1/previews/pixabay-28855-ravine.04dbf8f38f3b.mp4",
-];
-const DATASET_TRACKING_FILES = [
-  "dataset-catalog/v1/tracking/pexels-18187166-dune.c033bbc3a2f0.json",
-  "dataset-catalog/v1/tracking/pixabay-112059-dog-road.205b09287c77.json",
-  "dataset-catalog/v1/tracking/pixabay-145851-forest-bench.9cbf01a2d7a5.json",
-  "dataset-catalog/v1/tracking/pixabay-212474-forest-walk.941e11242772.json",
-  "dataset-catalog/v1/tracking/pixabay-28855-ravine.b5c34f482fec.json",
-];
 const STATIC_FILES = [
   "_headers",
   "app.js",
@@ -42,8 +28,6 @@ const STATIC_FILES = [
   "scenario-loader.js",
   "scenarios/index.html",
   "styles.css",
-  ...DATASET_PREVIEW_FILES,
-  ...DATASET_TRACKING_FILES,
 ];
 const APP_ROUTE_DIRECTORIES = ["datasets", "docs", "runs", "submit"];
 const BENCHMARK_FILES = [
@@ -829,7 +813,70 @@ async function scenarioDocument({ id, manifestPath, membership, metadata, baseli
   };
 }
 
-async function assertStaticAllowlist() {
+async function datasetAssetFiles() {
+  const catalogBody = await readFile(path.join(PUBLIC, "dataset-catalog/v1/catalog.json"));
+  if (catalogBody.length > MAX_CATALOG_BYTES) fail("dataset catalog exceeds 256 KiB");
+  const catalog = JSON.parse(catalogBody);
+  allowedObject(catalog, new Set(["datasets", "repository", "schemaVersion"]), "dataset catalog");
+  if (catalog.schemaVersion !== "cvbench.dataset-catalog/v1" || !Array.isArray(catalog.datasets)) {
+    fail("invalid dataset catalog schema");
+  }
+
+  const sourceLock = JSON.parse(await readFile(path.join(CONTROL_PLANE, "dataset-catalog-source.lock.json")));
+  allowedObject(sourceLock, new Set(["repository", "revision", "schemaVersion", "treeSha256"]), "dataset source lock");
+  requiredSha256(sourceLock.treeSha256, "dataset source lock treeSha256");
+  if (sourceLock.schemaVersion !== "cvbench.dataset-catalog-source/v1"
+    || sourceLock.repository !== "https://github.com/the-Drunken-coder/cvbench-dataset"
+    || !/^[a-f0-9]{40}$/.test(sourceLock.revision)) {
+    fail("invalid dataset source lock");
+  }
+  const repository = allowedObject(catalog.repository, new Set(["name", "revision", "url"]), "dataset catalog repository");
+  if (repository.name !== "cvbench-dataset" || repository.url !== sourceLock.repository
+    || repository.revision !== sourceLock.revision) {
+    fail("dataset catalog does not match its source lock");
+  }
+
+  const files = new Set();
+  for (const [datasetIndex, dataset] of catalog.datasets.entries()) {
+    if (!Array.isArray(dataset?.clips)) fail(`dataset catalog datasets[${datasetIndex}].clips must be an array`);
+    for (const [clipIndex, clip] of dataset.clips.entries()) {
+      const label = `dataset catalog datasets[${datasetIndex}].clips[${clipIndex}]`;
+      const id = requiredString(clip?.id, `${label}.id`);
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) fail(`${label}.id is invalid`);
+      const sourceSha256 = requiredSha256(clip.sourceSha256, `${label}.sourceSha256`);
+      if (clip.tracking && !clip.preview) fail(`${label}.tracking requires a preview`);
+
+      for (const [kind, asset] of [["preview", clip.preview], ["tracking", clip.tracking]]) {
+        if (asset === null) continue;
+        const fields = kind === "preview"
+          ? new Set(["bytes", "sha256", "sourceSha256", "url"])
+          : new Set(["bytes", "sha256", "url"]);
+        allowedObject(asset, fields, `${label}.${kind}`);
+        const digest = requiredSha256(asset.sha256, `${label}.${kind}.sha256`);
+        if (!Number.isInteger(asset.bytes) || asset.bytes <= 0 || asset.bytes > MAX_ASSET_BYTES) {
+          fail(`${label}.${kind}.bytes is invalid`);
+        }
+        const filename = kind === "preview"
+          ? `${id}.${sourceSha256.slice(0, 12)}.${digest.slice(0, 12)}.mp4`
+          : `${id}.${digest.slice(0, 12)}.json`;
+        if (kind === "preview" && asset.sourceSha256 !== sourceSha256) {
+          fail(`${label}.preview is not bound to the source media hash`);
+        }
+        const relative = `dataset-catalog/v1/${kind === "preview" ? "previews" : "tracking"}/${filename}`;
+        if (asset.url !== `/${relative}` || files.has(relative)) fail(`${label}.${kind}.url is invalid`);
+        const file = path.join(PUBLIC, relative);
+        const info = await assertedRegularFile(file, PUBLIC);
+        if (info.size !== asset.bytes || sha256(await readFile(file)) !== digest) {
+          fail(`${label}.${kind} does not match its declared bytes and hash`);
+        }
+        files.add(relative);
+      }
+    }
+  }
+  return [...files].sort();
+}
+
+async function assertStaticAllowlist(expectedFiles) {
   const actual = [];
   async function walk(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -842,7 +889,7 @@ async function assertStaticAllowlist() {
   }
   await walk(PUBLIC);
   actual.sort();
-  const expected = [...STATIC_FILES].sort();
+  const expected = [...expectedFiles].sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) fail(`public source allowlist mismatch: ${actual.join(", ")}`);
 }
 
@@ -908,7 +955,8 @@ async function buildCatalog(output, { metadataSource } = {}) {
   const baselines = await loadBaselineEvidence(path.join(CATALOG_SOURCE, "baselines.json"), CATALOG_SOURCE, ids);
   const expectedHashes = await expectedRealHashes();
   const realFrames = await loadRealFrameArchives(expectedHashes);
-  await assertStaticAllowlist();
+  const staticFiles = [...STATIC_FILES, ...await datasetAssetFiles()];
+  await assertStaticAllowlist(staticFiles);
 
   // Validate every declared record, path, hash, geometry, and size before replacing output.
   const preflightFrames = new Set();
@@ -929,7 +977,7 @@ async function buildCatalog(output, { metadataSource } = {}) {
   const buildOutput = await mkdtemp(path.join(path.dirname(output), `.${path.basename(output)}-staging-`));
   let installed = false;
   try {
-    for (const relative of STATIC_FILES) {
+    for (const relative of staticFiles) {
       const source = path.join(PUBLIC, relative);
       await assertedRegularFile(source, PUBLIC);
       const destination = path.join(buildOutput, relative);
