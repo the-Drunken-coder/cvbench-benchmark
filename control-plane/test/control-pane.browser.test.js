@@ -115,7 +115,8 @@ test("table-first control pane keeps datasets, submission, and runs focused", as
     assert.match(await page.locator(".clip-detail").textContent(), /YOLO26x-seg/);
     const clipVideo = page.locator("#clip-video");
     await page.getByText("Browser preview · 49 seconds").waitFor();
-    assert.match(await clipVideo.getAttribute("src"), /pixabay-28855-ravine\.825d9707b99a\.04dbf8f38f3b\.mp4$/);
+    assert.match(await clipVideo.getAttribute("src"),
+      /recovered-clean-videos-v1\.pixabay-28855-ravine\.825d9707b99a\.04dbf8f38f3b\.mp4$/);
     await page.waitForFunction(() => document.querySelector("#clip-video")?.readyState >= HTMLMediaElement.HAVE_METADATA);
     assert.ok(await clipVideo.evaluate((video) => video.duration > 48 && video.duration < 50));
     assert.equal(await trackingToggle.isChecked(), true);

@@ -59,10 +59,10 @@ identities, local paths, and mutable Studio authoring state are not copied into
 the hosted catalog.
 
 Preview files use silent H.264 at 854 pixels wide, 30 FPS, CRF 30, `yuv420p`,
-and fast-start metadata. Their filenames include the first 12 characters of
-both the source-media SHA-256 and preview SHA-256. The sync command records the
-full source hash, preview hash, and byte count, and the build derives its exact
-asset allowlist from those validated catalog declarations.
+and fast-start metadata. Their filenames include the dataset and clip IDs plus
+the first 12 characters of both the source-media SHA-256 and preview SHA-256.
+The sync command records the full source hash, preview hash, and byte count, and
+the build derives its exact asset allowlist from those validated declarations.
 
 ## Security properties
 

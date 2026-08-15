@@ -42,13 +42,13 @@
           "humanApprovals": 0,
           "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
           "preview": {
-            "url": "/dataset-catalog/v1/previews/pexels-18187166-dune.05bc3794c11d.9465c0693330.mp4",
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pexels-18187166-dune.05bc3794c11d.9465c0693330.mp4",
             "sha256": "9465c06933302af3a8dab6b4266fccc61880bff0870273018af5d21660d282e7",
             "sourceSha256": "05bc3794c11d787e946d868f6d5e2d1a40b0939dc6218aa3263b138adc64e0cc",
             "bytes": 236082
           },
           "tracking": {
-            "url": "/dataset-catalog/v1/tracking/pexels-18187166-dune.c033bbc3a2f0.json",
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pexels-18187166-dune.c033bbc3a2f0.json",
             "sha256": "c033bbc3a2f0f9d15c311074f6f28e8813eee120ef88cb851b716b1db2d13c67",
             "bytes": 24255
           }
@@ -76,13 +76,13 @@
           "humanApprovals": 0,
           "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
           "preview": {
-            "url": "/dataset-catalog/v1/previews/pixabay-112059-dog-road.b9fdd57c97d6.863b942a5735.mp4",
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pixabay-112059-dog-road.b9fdd57c97d6.863b942a5735.mp4",
             "sha256": "863b942a5735af180465564be91c7441f3643e0bdea477ee2033b04872f93f5f",
             "sourceSha256": "b9fdd57c97d629552dcdb6063a88827a27dfa240834d39cd47dc992207842c1b",
             "bytes": 374847
           },
           "tracking": {
-            "url": "/dataset-catalog/v1/tracking/pixabay-112059-dog-road.205b09287c77.json",
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pixabay-112059-dog-road.205b09287c77.json",
             "sha256": "205b09287c7723aeaf079b5eeb9b2eebe7ef5fd7413d57d08157ebe211067c0e",
             "bytes": 45736
           }
@@ -110,13 +110,13 @@
           "humanApprovals": 0,
           "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
           "preview": {
-            "url": "/dataset-catalog/v1/previews/pixabay-145851-forest-bench.b22382b1e94c.99c06564156e.mp4",
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pixabay-145851-forest-bench.b22382b1e94c.99c06564156e.mp4",
             "sha256": "99c06564156e4b94873ef37c4adac239637bb8f74e9cc01fd2335f2ce5ad0124",
             "sourceSha256": "b22382b1e94ca5189ff76a9ce37dd71660a36a785d0b50f897a23db363b083d9",
             "bytes": 603169
           },
           "tracking": {
-            "url": "/dataset-catalog/v1/tracking/pixabay-145851-forest-bench.9cbf01a2d7a5.json",
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pixabay-145851-forest-bench.9cbf01a2d7a5.json",
             "sha256": "9cbf01a2d7a5af40b12eb8468032bdc9a08ae2185bf3203ab6a1a5d80d8066fb",
             "bytes": 23226
           }
@@ -144,13 +144,13 @@
           "humanApprovals": 0,
           "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
           "preview": {
-            "url": "/dataset-catalog/v1/previews/pixabay-212474-forest-walk.1f0b743c9b2a.5cb9ec9618ef.mp4",
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pixabay-212474-forest-walk.1f0b743c9b2a.5cb9ec9618ef.mp4",
             "sha256": "5cb9ec9618ef1f2b7e30d4a7d89887f385dfcfd03452902379a31e9c141ece39",
             "sourceSha256": "1f0b743c9b2af9fefe8c6dae05adb613b24b59c94f8bf2319d726eaee720177a",
             "bytes": 1193168
           },
           "tracking": {
-            "url": "/dataset-catalog/v1/tracking/pixabay-212474-forest-walk.941e11242772.json",
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pixabay-212474-forest-walk.941e11242772.json",
             "sha256": "941e112427728a43f0762189a96d67eabe573c12da146d3fb6bdf10833671169",
             "bytes": 20099
           }
@@ -178,13 +178,13 @@
           "humanApprovals": 0,
           "model": "Ultralytics YOLO26x-seg COCO with Ultralytics YOLO26n-cls ImageNet ReID",
           "preview": {
-            "url": "/dataset-catalog/v1/previews/pixabay-28855-ravine.825d9707b99a.04dbf8f38f3b.mp4",
+            "url": "/dataset-catalog/v1/previews/recovered-clean-videos-v1.pixabay-28855-ravine.825d9707b99a.04dbf8f38f3b.mp4",
             "sha256": "04dbf8f38f3b9de6dd65391ef531e529251ca559b31a5d162ff36dc70539a031",
             "sourceSha256": "825d9707b99ad212efc94e0dda630ba9253239b404c960002c7b385386e69641",
             "bytes": 1536697
           },
           "tracking": {
-            "url": "/dataset-catalog/v1/tracking/pixabay-28855-ravine.b5c34f482fec.json",
+            "url": "/dataset-catalog/v1/tracking/recovered-clean-videos-v1.pixabay-28855-ravine.b5c34f482fec.json",
             "sha256": "b5c34f482feca2cc1414961fd235828cf3cf3b5b1633fe16634a8de6a473743a",
             "bytes": 100015
           }

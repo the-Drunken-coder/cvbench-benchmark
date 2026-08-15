@@ -112,7 +112,7 @@ function trackingBoxes(rows, clipId, media) {
   });
 }
 
-async function tracking(directory, id, scope, rows, media) {
+async function tracking(directory, datasetId, id, scope, rows, media) {
   const document = {
     schemaVersion: "cvbench.browser-boxes/v2",
     scope,
@@ -120,7 +120,7 @@ async function tracking(directory, id, scope, rows, media) {
   };
   const body = Buffer.from(`${JSON.stringify(document)}\n`);
   const digest = sha256(body);
-  const filename = `${id}.${digest.slice(0, 12)}.json`;
+  const filename = `${datasetId}.${id}.${digest.slice(0, 12)}.json`;
   await writeFile(path.join(directory, filename), body);
   return {
     url: `/dataset-catalog/v1/tracking/${filename}`,
@@ -129,18 +129,18 @@ async function tracking(directory, id, scope, rows, media) {
   };
 }
 
-async function preview(id, sourceSha256) {
+async function preview(datasetId, id, sourceSha256) {
   try {
     const sourcePrefix = sourceSha256.slice(0, 12);
     const candidates = (await readdir(PREVIEWS))
-      .filter((filename) => filename.startsWith(`${id}.`) && filename.endsWith(".mp4"));
+      .filter((filename) => filename.startsWith(`${datasetId}.${id}.`) && filename.endsWith(".mp4"));
     if (candidates.length === 0) return null;
     if (candidates.length > 1) throw new Error(`${id} has multiple browser previews`);
 
     const [filename] = candidates;
     const body = await readFile(path.join(PREVIEWS, filename));
     const digest = sha256(body);
-    if (filename !== `${id}.${sourcePrefix}.${digest.slice(0, 12)}.mp4`) {
+    if (filename !== `${datasetId}.${id}.${sourcePrefix}.${digest.slice(0, 12)}.mp4`) {
       throw new Error(`${id} preview filename does not match its source and content hashes`);
     }
     return {
@@ -190,6 +190,8 @@ function title(id) {
 async function readDataset(declaration, trackingDirectory) {
   const root = path.join(repository, declaration.path);
   const descriptor = parseYaml(await readFile(path.join(root, "dataset.yaml"), "utf8"));
+  const datasetId = required(descriptor.id, `${declaration.path}.id`);
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(datasetId)) throw new Error(`${declaration.path} contains an invalid dataset id`);
   const clips = await settleAll(descriptor.clips.map(async ({ id, path: clipPath }) => {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id ?? "")) {
       throw new Error(`${declaration.path} contains an invalid clip id`);
@@ -210,9 +212,10 @@ async function readDataset(declaration, trackingDirectory) {
       fpsNumerator: required(source.media?.fps_numerator, `${id}.media.fps_numerator`),
       fpsDenominator: required(source.media?.fps_denominator, `${id}.media.fps_denominator`),
     };
-    const clipPreview = await preview(id, sourceSha256);
+    const clipPreview = await preview(datasetId, id, sourceSha256);
     const clipTracking = clipPreview && tracks.length
-      ? await tracking(trackingDirectory, id, required(descriptor.annotation_scope, `${declaration.path}.annotation_scope`), tracks, media)
+      ? await tracking(trackingDirectory, datasetId, id,
+        required(descriptor.annotation_scope, `${declaration.path}.annotation_scope`), tracks, media)
       : null;
     const artifacts = {
       video_sha256: sourceSha256,
@@ -240,7 +243,7 @@ async function readDataset(declaration, trackingDirectory) {
     };
   }));
   return {
-    id: required(descriptor.id, `${declaration.path}.id`),
+    id: datasetId,
     title: required(descriptor.title, `${declaration.path}.title`),
     description: required(descriptor.description, `${declaration.path}.description`),
     path: declaration.path,

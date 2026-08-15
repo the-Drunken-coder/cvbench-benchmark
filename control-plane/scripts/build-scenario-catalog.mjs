@@ -847,6 +847,8 @@ async function datasetAssetFiles() {
   }
   const files = new Set();
   for (const [datasetIndex, dataset] of catalog.datasets.entries()) {
+    const datasetId = requiredString(dataset?.id, `dataset catalog datasets[${datasetIndex}].id`);
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(datasetId)) fail(`dataset catalog datasets[${datasetIndex}].id is invalid`);
     if (!Array.isArray(dataset?.clips)) fail(`dataset catalog datasets[${datasetIndex}].clips must be an array`);
     for (const [clipIndex, clip] of dataset.clips.entries()) {
       const label = `dataset catalog datasets[${datasetIndex}].clips[${clipIndex}]`;
@@ -866,8 +868,8 @@ async function datasetAssetFiles() {
           fail(`${label}.${kind}.bytes is invalid`);
         }
         const filename = kind === "preview"
-          ? `${id}.${sourceSha256.slice(0, 12)}.${digest.slice(0, 12)}.mp4`
-          : `${id}.${digest.slice(0, 12)}.json`;
+          ? `${datasetId}.${id}.${sourceSha256.slice(0, 12)}.${digest.slice(0, 12)}.mp4`
+          : `${datasetId}.${id}.${digest.slice(0, 12)}.json`;
         if (kind === "preview" && asset.sourceSha256 !== sourceSha256) {
           fail(`${label}.preview is not bound to the source media hash`);
         }
