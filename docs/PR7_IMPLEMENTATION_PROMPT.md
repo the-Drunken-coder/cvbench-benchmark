@@ -1,5 +1,7 @@
 # PR 7 implementation prompt
 
+> Redaction note: On 2026-09-02, one retired GitHub integration was removed from this historical prompt. The prompt is no longer verbatim.
+
 You are the implementation owner for a focused CVBench benchmark pacing and compute-accounting PR. The parent task is orchestration-only; own design verification, implementation, validation, branch/commit/push, and open a ready PR. Start from current origin/main containing merged PR #6. Do not merge or deploy production.
 
 User intent: preserve native source time and causal online evaluation, while allowing submitted whole vision systems to process slower when necessary without gaining an unpriced compute advantage. CVBench already has online_replay, playback_rate, container CPU/RAM limits, CPU-time sampling, latency, and source timestamps, but it does not make the source-time/compute-time contract or normalized resource cost clear enough.
@@ -18,4 +20,4 @@ Required contract:
 - Run exact Docker-scored E2E with at least a fast baseline and deliberately slow CPU-heavy/idle systems; publish evidence showing native source duration, delivery rate, CPU-seconds/source-second, real-time factor, accuracy, and category assignment.
 - Keep the solution simple and elegant. Preserve the exact implementation prompt in the PR description/repo history per project practice.
 
-Return PR URL, exact head, the versioned timing/compute contract, leaderboard semantics, compatibility notes, Docker evidence, tests, and blockers. Do not invoke final Greptile/CodeRabbit/Codex reviews; parent control room owns review follow-through.
+Return PR URL, exact head, the versioned timing/compute contract, leaderboard semantics, compatibility notes, Docker evidence, tests, and blockers. Do not invoke final CodeRabbit/Codex reviews; parent control room owns review follow-through.

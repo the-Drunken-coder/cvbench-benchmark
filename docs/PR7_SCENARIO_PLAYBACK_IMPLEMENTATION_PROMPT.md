@@ -1,4 +1,6 @@
-# Scenario playback implementation prompt (verbatim)
+# Scenario playback implementation prompt (historical, redacted)
+
+One retired GitHub integration was removed from this prompt on 2026-09-02.
 
 ```text
 You are the implementation owner for a focused CVBench public scenario-viewer UX PR. The parent task is orchestration-only; do the implementation, validation, branch/commit/push, and open a ready PR. Start from current origin/main containing merged PR #6. Do not merge or deploy production.
@@ -15,5 +17,5 @@ Required outcome:
 - Add real-browser tests measuring source-clock cadence, bounded drift, no blank frames, cache-cold start, 0.5x/1x/2x, play/pause/resume/end, scrubbing during playback, navigation races, overlays, Save-Data, mobile, reduced motion, and accessibility announcements. Include before/after capture or trace evidence.
 - Preserve the exact implementation prompt in the PR description/repo history per project practice.
 
-Run full control-plane/catalog/browser tests, deterministic build/hash/budget checks, Worker preview smoke, and existing Python/security regressions proportionately. Return PR URL, exact head, architecture choice, measured before/after cadence/blank evidence, tests, and blockers. Do not invoke final Greptile/CodeRabbit/Codex reviews; parent control room owns review follow-through.
+Run full control-plane/catalog/browser tests, deterministic build/hash/budget checks, Worker preview smoke, and existing Python/security regressions proportionately. Return PR URL, exact head, architecture choice, measured before/after cadence/blank evidence, tests, and blockers. Do not invoke final CodeRabbit/Codex reviews; parent control room owns review follow-through.
 ```

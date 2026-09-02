@@ -1,8 +1,8 @@
-# Scenario catalog implementation input (verbatim)
+# Scenario catalog implementation input (historical, redacted)
 
-The block below preserves the exact implementation input for the public scenario catalog change. Terminology inside this historical input is intentionally unchanged.
+The block below preserves the historical implementation input for the public scenario catalog change. One retired GitHub integration was removed on 2026-09-02; the rest of the terminology is unchanged.
 
-> You are the lead implementation task for CVBench PR #5, the public scenario catalog and viewer. Start from current origin/main, which now includes merged PR #4 at e8df36ebec225839bed7e8fa7aefec7617b8ee53. The parent task is orchestration-only; you own research confirmation, implementation, validation, branch/commit/push, and opening a focused draft PR #5. Do not invoke Greptile, CodeRabbit, or Codex review; do not resolve review threads; do not merge; do not deploy production.
+> You are the lead implementation task for CVBench PR #5, the public scenario catalog and viewer. Start from current origin/main, which now includes merged PR #4 at e8df36ebec225839bed7e8fa7aefec7617b8ee53. The parent task is orchestration-only; you own research confirmation, implementation, validation, branch/commit/push, and opening a focused draft PR #5. Do not invoke CodeRabbit or Codex review; do not resolve review threads; do not merge; do not deploy production.
 >
 > Product contract:
 > - Every currently supported scenario is public and directly inspectable on the public website: all 13 synthetic plus 3 real-video scenarios, with no hidden-current tier.
